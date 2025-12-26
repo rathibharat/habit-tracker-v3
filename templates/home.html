@@ -1,59 +1,122 @@
 {% extends "layout.html" %}
 {% block content %}
 
-<div class="flex justify-between mb-4">
-    <a href="?month={{ prev_month.strftime('%Y-%m') }}">← Prev</a>
-    <h2 class="font-bold">{{ current_month.strftime('%B %Y') }}</h2>
-    <a href="/home">Today</a>
+<div class="flex justify-between items-center mb-4">
+  <a class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
+     href="?month={{ prev_month.strftime('%Y-%m') }}">← Prev</a>
+
+  <h2 class="font-bold text-lg">{{ current_month.strftime('%B %Y') }}</h2>
+
+  <div class="flex gap-2">
+    <a class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
+       href="?month={{ next_month.strftime('%Y-%m') }}">Next →</a>
+    <a class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+       href="/home">Today</a>
+  </div>
 </div>
 
-<form method="POST" class="mb-4 flex gap-2">
-    <input type="hidden" name="action" value="add">
-    <input name="habit_name" placeholder="Habit" required class="border p-1">
-    <select name="frequency" class="border p-1">
-        <option value="daily">Daily</option>
-        <option value="weekly">Weekly</option>
-        <option value="monthly">Monthly</option>
-    </select>
-    <button class="bg-green-500 text-white px-2">Add</button>
+<!-- Add Habit -->
+<form method="POST" class="mb-4 flex flex-col sm:flex-row gap-2">
+  <input type="hidden" name="action" value="add">
+  <input name="habit_name" placeholder="Habit name" required class="border p-2 rounded flex-1">
+  <select name="frequency" class="border p-2 rounded">
+    <option value="daily">Daily</option>
+    <option value="weekly">Weekly (Sat)</option>
+    <option value="monthly">Monthly (2nd last day)</option>
+  </select>
+  <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button>
 </form>
 
-<div class="grid grid-cols-7 gap-2">
-{% for day in month_days %}
-<div class="p-2 rounded day-box
-{% if day.date > today %}bg-gray-300
-{% elif day.entries|selectattr('completed')|list|length == day.entries|length and day.entries|length>0 %}bg-green-400
-{% elif day.entries|selectattr('completed')|list|length > 0 %}bg-yellow-300
-{% else %}bg-red-400{% endif %}">
-
-<strong>{{ day.date.day }}</strong>
-
-{% for e in day.entries %}
-<label class="block">
-<input type="checkbox" data-entry="{{ e.id }}" {% if e.completed %}checked{% endif %}>
-{{ e.habit_id | habit_name }}
-</label>
-{% endfor %}
-
-<textarea class="w-full text-sm mt-2 reason"
-data-date="{{ day.date }}">{{ day.reason }}</textarea>
+<!-- Remove Habit buttons -->
+<div class="mb-4">
+  <h3 class="font-semibold mb-2">Your Habits</h3>
+  <div class="flex flex-wrap gap-2">
+    {% for h in habits %}
+    <form method="POST" class="flex items-center gap-2 bg-white border rounded px-3 py-2">
+      <input type="hidden" name="action" value="remove">
+      <input type="hidden" name="habit_id" value="{{ h.id }}">
+      <span class="text-sm font-medium">{{ h.name }}</span>
+      <span class="text-xs text-gray-500">({{ h.frequency }})</span>
+      <button class="ml-2 text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700">
+        Remove
+      </button>
+    </form>
+    {% endfor %}
+    {% if habits|length == 0 %}
+      <div class="text-sm text-gray-600">No habits yet. Add one above.</div>
+    {% endif %}
+  </div>
+  <p class="text-xs text-gray-500 mt-2">
+    Remove deletes only from <b>today onward</b>. Past history is preserved.
+  </p>
 </div>
+
+<!-- Calendar -->
+<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+{% for day in month_days %}
+  {% set checked_count = day.entries|selectattr('completed', 'equalto', 1)|list|length %}
+  {% set total_count = day.entries|length %}
+
+  <div class="p-3 rounded day-box
+    {% if day.date > today %}bg-gray-300
+    {% elif total_count > 0 and checked_count == total_count %}bg-green-400
+    {% elif checked_count > 0 %}bg-yellow-300
+    {% else %}bg-red-400{% endif %}">
+
+    <div class="flex items-center justify-between">
+      <strong>{{ day.date.day }}</strong>
+      <span class="text-xs text-gray-700 count">{{ checked_count }}/{{ total_count }}</span>
+    </div>
+
+    {% for e in day.entries %}
+    <label class="block text-sm mt-1">
+      <input type="checkbox" class="mr-1" data-entry="{{ e.id }}" {% if e.completed %}checked{% endif %}>
+      {{ e.habit_id | habit_name }}
+    </label>
+    {% endfor %}
+
+    <textarea class="w-full text-sm mt-2 p-2 rounded border reason"
+              data-date="{{ day.date }}"
+              placeholder="Reason (once per day)…">{{ day.reason }}</textarea>
+  </div>
 {% endfor %}
 </div>
 
 <script>
-document.querySelectorAll('input[type=checkbox]').forEach(cb=>{
-cb.onchange=()=>{
-fetch("/update_completion",{method:"POST",headers:{"Content-Type":"application/json"},
-body:JSON.stringify({entry_id:cb.dataset.entry,completed:cb.checked?1:0})});
-let box=cb.closest(".day-box");
-let c=box.querySelectorAll("input:checked").length;
-let t=box.querySelectorAll("input").length;
-box.className="p-2 rounded day-box "+(c==t&&t?"bg-green-400":c?"bg-yellow-300":"bg-red-400");
-}});
-document.querySelectorAll(".reason").forEach(r=>{
-r.onblur=()=>fetch("/update_reason",{method:"POST",headers:{"Content-Type":"application/json"},
-body:JSON.stringify({date:r.dataset.date,reason:r.value})});
+function updateDayColor(dayBox) {
+  const total = dayBox.querySelectorAll("input[type=checkbox]").length;
+  const checked = dayBox.querySelectorAll("input[type=checkbox]:checked").length;
+
+  dayBox.classList.remove("bg-red-400", "bg-yellow-300", "bg-green-400");
+
+  if (total === 0) return;
+  if (checked === total) dayBox.classList.add("bg-green-400");
+  else if (checked > 0) dayBox.classList.add("bg-yellow-300");
+  else dayBox.classList.add("bg-red-400");
+
+  const cnt = dayBox.querySelector(".count");
+  if (cnt) cnt.textContent = `${checked}/${total}`;
+}
+
+document.querySelectorAll('input[type=checkbox][data-entry]').forEach(cb => {
+  cb.addEventListener("change", () => {
+    fetch("/update_completion", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ entry_id: cb.dataset.entry, completed: cb.checked ? 1 : 0 })
+    });
+    updateDayColor(cb.closest(".day-box"));
+  });
+});
+
+document.querySelectorAll(".reason").forEach(r => {
+  r.addEventListener("blur", () => {
+    fetch("/update_reason", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ date: r.dataset.date, reason: r.value })
+    });
+  });
 });
 </script>
 

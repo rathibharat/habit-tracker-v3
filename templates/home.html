@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% block content %}
 
+<!-- Month Navigation -->
 <div class="flex justify-between items-center mb-4">
   <a class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
      href="?month={{ prev_month.strftime('%Y-%m') }}">← Prev</a>
@@ -12,6 +13,27 @@
        href="?month={{ next_month.strftime('%Y-%m') }}">Next →</a>
     <a class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
        href="/home">Today</a>
+  </div>
+</div>
+
+<!-- Per-habit streaks -->
+<div class="mb-4">
+  <h3 class="font-semibold mb-2">Streaks (per habit)</h3>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+    {% for hs in habit_streaks %}
+      <div class="bg-white border rounded p-3 flex items-center justify-between">
+        <div>
+          <div class="font-bold">{{ hs.name }}</div>
+          <div class="text-xs text-gray-500">{{ hs.frequency }}</div>
+        </div>
+        <div class="text-right">
+          <div class="text-xs text-gray-500">Current</div>
+          <div class="text-xl font-bold">{{ hs.streak }}</div>
+        </div>
+      </div>
+    {% else %}
+      <div class="text-sm text-gray-600">No habits yet. Add one below.</div>
+    {% endfor %}
   </div>
 </div>
 
@@ -46,40 +68,57 @@
       <div class="text-sm text-gray-600">No habits yet. Add one above.</div>
     {% endif %}
   </div>
-  <p class="text-xs text-gray-500 mt-2">
-    Remove deletes only from <b>today onward</b>. Past history is preserved.
-  </p>
 </div>
 
-<!-- Calendar -->
-<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-{% for day in month_days %}
-  {% set checked_count = day.entries|selectattr('completed', 'equalto', 1)|list|length %}
-  {% set total_count = day.entries|length %}
-
-  <div class="p-3 rounded day-box
-    {% if day.date > today %}bg-gray-300
-    {% elif total_count > 0 and checked_count == total_count %}bg-green-400
-    {% elif checked_count > 0 %}bg-yellow-300
-    {% else %}bg-red-400{% endif %}">
-
-    <div class="flex items-center justify-between">
-      <strong>{{ day.date.day }}</strong>
-      <span class="text-xs text-gray-700 count">{{ checked_count }}/{{ total_count }}</span>
+<!-- Calendar header + grid -->
+<div class="overflow-x-auto">
+  <div class="min-w-[900px]">
+    <!-- Mon-Sun header -->
+    <div class="grid grid-cols-7 gap-2 mb-2 text-center font-semibold text-gray-700">
+      <div class="bg-white border rounded p-2">Mon</div>
+      <div class="bg-white border rounded p-2">Tue</div>
+      <div class="bg-white border rounded p-2">Wed</div>
+      <div class="bg-white border rounded p-2">Thu</div>
+      <div class="bg-white border rounded p-2">Fri</div>
+      <div class="bg-white border rounded p-2">Sat</div>
+      <div class="bg-white border rounded p-2">Sun</div>
     </div>
 
-    {% for e in day.entries %}
-    <label class="block text-sm mt-1">
-      <input type="checkbox" class="mr-1" data-entry="{{ e.id }}" {% if e.completed %}checked{% endif %}>
-      {{ e.habit_id | habit_name }}
-    </label>
-    {% endfor %}
+    <!-- Calendar cells -->
+    <div class="grid grid-cols-7 gap-2">
+      {% for cell in month_cells %}
+        {% if cell is none %}
+          <div class="p-3 rounded bg-transparent"></div>
+        {% else %}
+          {% set checked_count = cell.entries|selectattr('completed', 'equalto', 1)|list|length %}
+          {% set total_count = cell.entries|length %}
 
-    <textarea class="w-full text-sm mt-2 p-2 rounded border reason"
-              data-date="{{ day.date }}"
-              placeholder="Reason">{{ day.reason }}</textarea>
+          <div class="p-3 rounded day-box
+            {% if cell.date > today %}bg-gray-300
+            {% elif total_count > 0 and checked_count == total_count %}bg-green-400
+            {% elif checked_count > 0 %}bg-yellow-300
+            {% else %}bg-red-400{% endif %}">
+
+            <div class="flex items-center justify-between">
+              <strong>{{ cell.date.day }}</strong>
+              <span class="text-xs text-gray-700 count">{{ checked_count }}/{{ total_count }}</span>
+            </div>
+
+            {% for e in cell.entries %}
+              <label class="block text-sm mt-1">
+                <input type="checkbox" class="mr-1" data-entry="{{ e.id }}" {% if e.completed %}checked{% endif %}>
+                {{ e.habit_id | habit_name }}
+              </label>
+            {% endfor %}
+
+            <textarea class="w-full text-sm mt-2 p-2 rounded border reason"
+                      data-date="{{ cell.date }}"
+                      placeholder="Reason (once per day)…">{{ cell.reason }}</textarea>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
   </div>
-{% endfor %}
 </div>
 
 <script>

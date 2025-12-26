@@ -1,54 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Streakly - {% block title %}{% endblock %}</title>
+    <title>Streakly</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
-<body class="bg-gray-50 min-h-screen flex flex-col">
-    <!-- Header -->
-    <header class="flex items-center p-4 bg-white shadow-md">
-        <img src="{{ url_for('static', filename='logo.png') }}" class="w-8 h-8 mr-2" alt="Logo">
-        <h1 class="text-xl font-bold">Streakly</h1>
-    </header>
+<body class="bg-gray-50">
+<header class="bg-white shadow p-4 flex items-center space-x-2">
+    <div class="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center">✓</div>
+    <h1 class="text-xl font-bold">Streakly</h1>
+</header>
 
-    <div class="flex flex-1">
-        <!-- Sidebar -->
-        <aside class="w-64 p-4 bg-gray-100 hidden sm:block">
-            <nav class="flex flex-col space-y-2">
-                <a href="{{ url_for('home') }}" class="p-2 rounded hover:bg-gray-200">Home</a>
-                <a href="{{ url_for('analytics') }}" class="p-2 rounded hover:bg-gray-200">Analytics</a>
-                <a href="{{ url_for('export_csv') }}" class="p-2 rounded hover:bg-gray-200">Export CSV</a>
-                <a href="{{ url_for('logout') }}" class="p-2 rounded hover:bg-gray-200">Logout</a>
-                <button onclick="window.location='{{ url_for('home') }}'" class="p-2 rounded bg-blue-500 text-white mt-2">Jump to Today</button>
-            </nav>
-        </aside>
+<div class="flex">
+<nav class="w-48 bg-gray-100 p-4">
+    <a href="/home" class="block mb-2">Home</a>
+    <a href="/home" class="block mb-2">Jump to Today</a>
+    <a href="/logout" class="block mt-4 text-red-500">Logout</a>
+</nav>
 
-        <!-- Main Content -->
-        <main class="flex-1 p-4 overflow-x-auto">
-            {% block content %}{% endblock %}
-        </main>
-    </div>
-
-    <!-- AJAX script for habit completion -->
-    <script>
-    $(document).ready(function(){
-        $('input[type="checkbox"][name="completed"]').change(function(){
-            var entryId = $(this).closest('form').find('input[name="entry_id"]').val();
-            var completed = $(this).is(':checked') ? 1 : 0;
-            $.ajax({
-                url: "{{ url_for('update_completion') }}",
-                type: "POST",
-                contentType: "application/json",
-                data: JSON.stringify({entry_id: entryId, completed: completed}),
-                success: function(res){
-                    console.log("Updated successfully");
-                }
-            });
-        });
-    });
-    </script>
+<main class="flex-1 p-4">
+{% block content %}{% endblock %}
+</main>
+</div>
 </body>
 </html>

@@ -1,1 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Streakly</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+.day { min-height:60px; border-radius:4px; padding:3px; margin:2px; color:black; }
+.sidebar { min-width:150px; padding:10px; border-right:1px solid #ddd; }
+</style>
+</head>
+<body>
+<div class="d-flex">
+    <div class="sidebar bg-light">
+        <h4>Streakly ✅</h4>
+        <a href="{{ url_for('home') }}" class="d-block my-2">Home</a>
+        <a href="{{ url_for('analytics') }}" class="d-block my-2">Analytics</a>
+        <a href="{{ url_for('export') }}" class="d-block my-2">Export CSV</a>
+        {% if session.get('user_id') %}
+            {% set user = User.query.get(session.get('user_id')) %}
+            {% if user.is_admin %}
+            <a href="{{ url_for('admin_dashboard') }}" class="d-block my-2">Admin</a>
+            {% endif %}
+        {% endif %}
+        <a href="{{ url_for('logout') }}" class="d-block my-2">Logout</a>
+    </div>
+    <div class="flex-grow-1 p-3">
+        {% block content %}{% endblock %}
+    </div>
+</div>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</body>
+</html>
 

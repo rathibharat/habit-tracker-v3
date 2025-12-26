@@ -17,29 +17,43 @@
   </div>
 </header>
 
-<div class="max-w-7xl mx-auto px-4 py-5 flex gap-4">
-  <!-- Sidebar -->
-  <aside class="w-60 hidden md:block">
-    <nav class="bg-white border rounded-2xl p-3 shadow-sm">
-      <a href="/home" class="block px-3 py-2 rounded-xl hover:bg-gray-100 transition">Home</a>
-      <a href="/analytics" class="block px-3 py-2 rounded-xl hover:bg-gray-100 transition">Analytics</a>
-      <a href="/export" class="block px-3 py-2 rounded-xl hover:bg-gray-100 transition">Export</a>
+<div class="max-w-7xl mx-auto px-4 py-6 flex gap-6">
 
-      <div class="my-3 border-t"></div>
+  {% if session.get("user_id") %}
+    <!-- Sidebar (only when logged in) -->
+    <aside class="hidden md:block w-60">
+      <div class="bg-white border border-gray-200 rounded-2xl p-3 shadow-sm">
+        <nav class="space-y-1">
+          <a href="/home" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
+            🏠 <span>Home</span>
+          </a>
+          <a href="/analytics" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
+            📈 <span>Analytics</span>
+          </a>
+          <a href="/export" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
+            ⬇️ <span>Export</span>
+          </a>
 
-      <a href="/home" class="block px-3 py-2 rounded-xl hover:bg-gray-100 transition">Jump to Today</a>
-      <a href="/logout" class="block px-3 py-2 rounded-xl text-red-600 hover:bg-red-50 transition mt-1">Logout</a>
-    </nav>
+          <div class="h-px bg-gray-200 my-2"></div>
 
-    <div class="text-xs text-gray-400 mt-3 px-2">
-      Tip: keep goals small. Consistency beats intensity.
-    </div>
-  </aside>
+          <a href="/home" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
+            🗓️ <span>Jump to Today</span>
+          </a>
 
-  <!-- Main -->
-  <main class="flex-1">
+          <a href="/logout" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm text-red-600">
+            🚪 <span>Logout</span>
+          </a>
+        </nav>
+      </div>
+    </aside>
+  {% endif %}
+
+  <!-- Main content -->
+  <main class="flex-1 min-w-0">
     {% block content %}{% endblock %}
   </main>
+
 </div>
+
 </body>
 </html>

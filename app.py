@@ -1,277 +1,224 @@
-# streakly_app.py
-# Full version ready for deployment
-
-from flask import Flask, render_template_string, request, redirect, url_for, session
+from flask import Flask, request, redirect, session, url_for, Response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date, datetime, timedelta
-import calendar
-import os
+import calendar, os
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
+app.secret_key = os.environ.get("SECRET_KEY", "streakly-secret")
 
-# ---------- DATABASE ----------
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", "sqlite:///habits.db")
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+PORT = int(os.environ.get("PORT", 5000))
+
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+    "DATABASE_URL", "sqlite:///streakly.db"
+)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
-# ---------- MODELS ----------
+# ================= MODELS =================
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
+    email = db.Column(db.String(120), unique=True)
+    password_hash = db.Column(db.String(200))
 
 class Habit(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    goal = db.Column(db.String(200))
-    frequency = db.Column(db.String(10), default='daily')  # daily/weekly/monthly
+    user_id = db.Column(db.Integer)
+    name = db.Column(db.String(120))
 
-class DailyStatus(db.Model):
+class Log(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    habit_id = db.Column(db.Integer, db.ForeignKey('habit.id'))
+    user_id = db.Column(db.Integer)
+    habit_id = db.Column(db.Integer)
     day = db.Column(db.String(10))
     completed = db.Column(db.Integer, default=0)
-
-class DailyReason(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    day = db.Column(db.String(10))
     reason = db.Column(db.String(300))
 
 with app.app_context():
     db.create_all()
 
-# ---------- AUTH HELPERS ----------
-def current_user():
-    if 'user_id' in session:
-        return User.query.get(session['user_id'])
-    return None
+# ================= HELPERS =================
+def user():
+    return User.query.get(session["uid"]) if "uid" in session else None
 
-# ---------- AUTH ROUTES ----------
-from itsdangerous import URLSafeTimedSerializer
-serializer = URLSafeTimedSerializer(app.secret_key)
+def streak(habit_id):
+    logs = Log.query.filter_by(habit_id=habit_id, completed=1).order_by(Log.day).all()
+    s = b = 0
+    prev = None
+    for l in logs:
+        d = datetime.strptime(l.day, "%Y-%m-%d").date()
+        s = s + 1 if prev and d == prev + timedelta(days=1) else 1
+        b = max(b, s)
+        prev = d
+    return s, b
 
-@app.route('/register', methods=['GET','POST'])
-def register():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = generate_password_hash(request.form['password'])
-        if User.query.filter_by(email=email).first():
-            return "User already exists"
-        user = User(email=email, password_hash=password)
-        db.session.add(user)
-        db.session.commit()
-        return redirect(url_for('login'))
-    return render_template_string('''
-    <h2>Register</h2>
-    <form method="post">
-      Email <input name="email"><br>
-      Password <input name="password" type="password"><br>
-      <button>Register</button>
-    </form>
-    ''')
-
-@app.route('/login', methods=['GET','POST'])
+# ================= AUTH =================
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        user = User.query.filter_by(email=request.form['email']).first()
-        if user and check_password_hash(user.password_hash, request.form['password']):
-            session['user_id'] = user.id
-            return redirect(url_for('calendar_view'))
+    if request.method == "POST":
+        u = User.query.filter_by(email=request.form["email"]).first()
+        if u and check_password_hash(u.password_hash, request.form["password"]):
+            session["uid"] = u.id
+            return redirect("/")
         return "Invalid credentials"
-    return render_template_string('''
-    <h2>Login</h2>
-    <form method="post">
-      Email <input name="email"><br>
-      Password <input name="password" type="password"><br>
-      <button>Login</button>
-    </form>
-    <a href='/register'>Register</a>
-    ''')
 
-@app.route('/logout')
+    return """
+<!DOCTYPE html>
+<html>
+<head><script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-gradient-to-br from-indigo-100 to-purple-100 min-h-screen flex items-center justify-center">
+<div class="bg-white shadow-xl rounded-xl p-8 w-full max-w-sm">
+<h1 class="text-3xl font-bold text-center text-indigo-600 mb-2">Streakly</h1>
+<p class="text-center text-gray-500 mb-6">Build habits. Stay consistent.</p>
+<form method="post" class="space-y-4">
+<input name="email" placeholder="Email" class="w-full border p-2 rounded">
+<input type="password" name="password" placeholder="Password" class="w-full border p-2 rounded">
+<button class="w-full bg-indigo-600 text-white py-2 rounded">Login</button>
+</form>
+<p class="text-center mt-4 text-sm">
+<a href="/register" class="text-indigo-600">Create account</a>
+</p>
+</div>
+</body>
+</html>
+"""
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        if User.query.filter_by(email=request.form["email"]).first():
+            return "User exists"
+        u = User(
+            email=request.form["email"],
+            password_hash=generate_password_hash(request.form["password"]),
+        )
+        db.session.add(u)
+        db.session.commit()
+        return redirect("/login")
+
+    return """
+<!DOCTYPE html>
+<html>
+<head><script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-gradient-to-br from-indigo-100 to-purple-100 min-h-screen flex items-center justify-center">
+<div class="bg-white shadow-xl rounded-xl p-8 w-full max-w-sm">
+<h1 class="text-3xl font-bold text-center text-indigo-600 mb-2">Streakly</h1>
+<p class="text-center text-gray-500 mb-6">Start your consistency journey</p>
+<form method="post" class="space-y-4">
+<input name="email" placeholder="Email" class="w-full border p-2 rounded">
+<input type="password" name="password" placeholder="Password" class="w-full border p-2 rounded">
+<button class="w-full bg-indigo-600 text-white py-2 rounded">Register</button>
+</form>
+<p class="text-center mt-4 text-sm">
+<a href="/login" class="text-indigo-600">Already have an account?</a>
+</p>
+</div>
+</body>
+</html>
+"""
+
+@app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for('login'))
+    return redirect("/login")
 
-# ---------- DASHBOARD HELPERS ----------
-def calculate_streaks(statuses):
-    days = sorted([s.day for s in statuses if s.completed])
-    streak = max_streak = 0
-    prev = None
-    for d in days:
-        cur = datetime.strptime(d, '%Y-%m-%d').date()
-        if prev and cur == prev + timedelta(days=1):
-            streak += 1
-        else:
-            streak = 1
-        max_streak = max(max_streak, streak)
-        prev = cur
-    return streak, max_streak
-
-# ---------- CALENDAR ----------
-@app.route('/')
-def calendar_view():
-    user = current_user()
-    if not user:
-        return redirect(url_for('login'))
+# ================= DASHBOARD =================
+@app.route("/")
+def dashboard():
+    u = user()
+    if not u:
+        return redirect("/login")
 
     today = date.today()
-    year = int(request.args.get('year', today.year))
-    month = int(request.args.get('month', today.month))
+    y = int(request.args.get("year", today.year))
+    m = int(request.args.get("month", today.month))
 
-    # Prev/Next month
-    if month == 1: prev_month, prev_year = 12, year-1
-    else: prev_month, prev_year = month-1, year
-    if month == 12: next_month, next_year = 1, year+1
-    else: next_month, next_year = month+1, year
+    habits = Habit.query.filter_by(user_id=u.id).all()
+    logs = Log.query.filter_by(user_id=u.id).all()
 
-    habits = Habit.query.filter_by(user_id=user.id).all()
-    statuses = DailyStatus.query.filter_by(user_id=user.id).all()
-    reasons = {r.day:r.reason for r in DailyReason.query.filter_by(user_id=user.id).all()}
+    cal = calendar.monthcalendar(y, m)
+    log_map = {}
+    for l in logs:
+        log_map.setdefault(l.day, []).append(l)
 
-    completed = [s for s in statuses if s.completed]
-    streak, best_streak = calculate_streaks(completed)
-    total = len(statuses)
-    done = len(completed)
-    consistency = round((done/total)*100,1) if total else 0
-
-    status_map = {}
-    for s in statuses:
-        status_map.setdefault(s.day, {})[s.habit_id] = s.completed
-
-    cal = calendar.monthcalendar(year, month)
-
-    return render_template_string('''
+    return f"""
 <!DOCTYPE html>
-<html><head><script src="https://cdn.tailwindcss.com"></script></head>
-<body class="bg-gray-50 min-h-screen">
-<div class="max-w-6xl mx-auto p-4">
-  <div class="flex justify-between items-center mb-4">
-    <h1 class="text-3xl font-bold text-blue-600">Streakly</h1>
-    <div class="flex gap-2">
-      <a href="/?month={{ prev_month }}&year={{ prev_year }}" class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300">Previous</a>
-      <span class="font-semibold text-lg">{{ year }} - {{ month }}</span>
-      <a href="/?month={{ next_month }}&year={{ next_year }}" class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300">Next</a>
-    </div>
-    <a href="/logout" class="text-red-500 ml-4">Logout</a>
-  </div>
+<html>
+<head><script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-gray-100">
+<div class="max-w-7xl mx-auto p-4">
 
-  <div class="bg-white rounded-xl shadow p-4 mb-4">
-    <div class="mb-2">Current Streak: <span class="font-bold">{{ streak }}</span></div>
-    <div class="mb-2">Best Streak: <span class="font-bold">{{ best_streak }}</span></div>
-    <div>Consistency: <span class="font-bold">{{ consistency }}%</span></div>
-  </div>
+<h1 class="text-3xl font-bold text-indigo-600 mb-4">Streakly</h1>
 
-  <div class="bg-white rounded-xl shadow p-4 mb-6">
-    <form method="post" action="/add_habit" class="flex gap-2">
-      <input name="goal" placeholder="New habit" class="flex-1 border p-2 rounded">
-      <select name="frequency" class="border p-2 rounded">
-        <option value="daily" selected>Daily</option>
-        <option value="weekly">Weekly</option>
-        <option value="monthly">Monthly</option>
-      </select>
-      <button class="bg-blue-600 text-white px-4 rounded">Add</button>
-    </form>
-  </div>
-
-  <div class="grid grid-cols-7 gap-2">
-    {% for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
-      <div class="text-center font-semibold">{{d}}</div>
-    {% endfor %}
-
-    {% for week in cal %}
-      {% for day in week %}
-        {% if day==0 %}<div></div>
-        {% else %}
-          {% set ds = year|string + '-' + '%02d'|format(month) + '-' + '%02d'|format(day) %}
-          {% set total_habits = habits|length %}
-          {% set completed_habits = status_map.get(ds, {})|length %}
-          {% if completed_habits==0 %} {% set color='bg-red-300' %}
-          {% elif completed_habits==total_habits %} {% set color='bg-green-300' %}
-          {% else %} {% set color='bg-yellow-200' %} {% endif %}
-          <div class="{{color}} rounded-lg shadow p-2 text-sm">
-            <div class="font-bold">{{day}}</div>
-            {% for h in habits %}
-              <form method="post" action="/update" class="flex items-center gap-1">
-                <input type="hidden" name="habit_id" value="{{h.id}}">
-                <input type="hidden" name="day" value="{{ds}}">
-                <input type="checkbox" name="completed" {% if status_map.get(ds,{}).get(h.id) %}checked{% endif %} onchange="this.form.submit()">
-                <span class="truncate">{{h.goal}}</span>
-              </form>
-            {% endfor %}
-            <form method="post" action="/update_reason" class="mt-1">
-              <input type="hidden" name="day" value="{{ds}}">
-              <input name="reason" value="{{ reasons.get(ds,'') }}" placeholder="Reason" class="w-full border rounded p-1 text-xs">
-              <button type="submit" class="hidden"></button>
-            </form>
-          </div>
-        {% endif %}
-      {% endfor %}
-    {% endfor %}
-  </div>
-
-  <div class="mt-4">
-    <a href="/export_csv" class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300">Export CSV</a>
-  </div>
+<div class="flex gap-4 mb-4">
+<a href="/?year={y if m>1 else y-1}&month={m-1 if m>1 else 12}" class="px-3 py-1 bg-gray-200 rounded">◀ Prev</a>
+<a href="/?year={y if m<12 else y+1}&month={m+1 if m<12 else 1}" class="px-3 py-1 bg-gray-200 rounded">Next ▶</a>
 </div>
-</body></html>
-''',
-    year=year, month=month, cal=cal, habits=habits, status_map=status_map, reasons=reasons,
-    prev_month=prev_month, prev_year=prev_year, next_month=next_month, next_year=next_year,
-    streak=streak, best_streak=best_streak, consistency=consistency)
 
-# ---------- ACTIONS ----------
-@app.route('/add_habit', methods=['POST'])
+<form method="post" action="/add_habit" class="mb-4 flex gap-2">
+<input name="name" placeholder="New habit" class="border p-2 rounded w-64">
+<button class="bg-indigo-600 text-white px-4 rounded">Add</button>
+</form>
+
+<div class="grid grid-cols-7 gap-2">
+{''.join('<div class="font-semibold text-center">'+d+'</div>' for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'])}
+{''.join(self for self in [
+''.join(
+'<div class="bg-white p-2 rounded shadow">'+
+'<div class="font-bold">'+str(day)+'</div>'+
+''.join(
+f'<form method="post" action="/toggle"><input type="hidden" name="day" value="{y}-{m:02d}-{day:02d}"><input type="hidden" name="habit_id" value="{h.id}"><label class="flex items-center gap-1"><input type="checkbox" name="done" onchange="this.form.submit()"> {h.name}</label></form>'
+for h in habits
+)+'</div>' if day else '<div></div>'
+for day in week
+)
+for week in cal
+])}
+</div>
+
+<a href="/export" class="mt-6 inline-block bg-green-600 text-white px-4 py-2 rounded">Export CSV</a>
+
+</div>
+</body>
+</html>
+"""
+
+# ================= ACTIONS =================
+@app.route("/add_habit", methods=["POST"])
 def add_habit():
-    user = current_user()
-    h = Habit(user_id=user.id, goal=request.form['goal'], frequency=request.form['frequency'])
-    db.session.add(h)
+    u = user()
+    db.session.add(Habit(user_id=u.id, name=request.form["name"]))
     db.session.commit()
-    return redirect(url_for('calendar_view'))
+    return redirect("/")
 
-@app.route('/update', methods=['POST'])
-def update():
-    user = current_user()
-    completed = 1 if request.form.get('completed') else 0
-    entry = DailyStatus.query.filter_by(user_id=user.id, habit_id=request.form['habit_id'], day=request.form['day']).first()
-    if not entry:
-        entry = DailyStatus(user_id=user.id, habit_id=request.form['habit_id'], day=request.form['day'], completed=completed)
-        db.session.add(entry)
+@app.route("/toggle", methods=["POST"])
+def toggle():
+    u = user()
+    day = request.form["day"]
+    hid = request.form["habit_id"]
+    log = Log.query.filter_by(user_id=u.id, habit_id=hid, day=day).first()
+    if not log:
+        log = Log(user_id=u.id, habit_id=hid, day=day, completed=1)
+        db.session.add(log)
     else:
-        entry.completed = completed
+        log.completed = 1 - log.completed
     db.session.commit()
-    return redirect(url_for('calendar_view'))
+    return redirect("/")
 
-@app.route('/update_reason', methods=['POST'])
-def update_reason():
-    user = current_user()
-    day = request.form['day']
-    reason_text = request.form['reason']
-    r = DailyReason.query.filter_by(user_id=user.id, day=day).first()
-    if not r:
-        r = DailyReason(user_id=user.id, day=day, reason=reason_text)
-        db.session.add(r)
-    else:
-        r.reason = reason_text
-    db.session.commit()
-    return redirect(url_for('calendar_view'))
+@app.route("/export")
+def export():
+    u = user()
+    rows = db.session.query(Log.day, Habit.name, Log.completed, Log.reason)\
+        .join(Habit, Habit.id == Log.habit_id)\
+        .filter(Log.user_id == u.id).all()
 
-# ---------- EXPORT ----------
-@app.route('/export_csv')
-def export_csv():
-    user = current_user()
-    rows = DailyStatus.query.filter_by(user_id=user.id).all()
-    output = 'date,habit_id,completed\n'
+    csv = "date,habit,completed,reason\n"
     for r in rows:
-        output += f'{r.day},{r.habit_id},{r.completed}\n'
-    return app.response_class(output, mimetype='text/csv', headers={"Content-Disposition": "attachment;filename=habit_export.csv"})
+        csv += f"{r[0]},{r[1]},{r[2]},{r[3] or ''}\n"
 
-# ---------- RUN ----------
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    return Response(csv, mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=streakly.csv"})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=PORT)

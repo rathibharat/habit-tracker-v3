@@ -23,6 +23,21 @@
   </header>
 
   {% set logged_in = session.get("user_id") %}
+  {% set path = request.path %}
+
+  {% macro nav_item(href, icon, label) -%}
+    {% set active = (path == href) or (href != '/home' and path.startswith(href)) or (href == '/home' and (path == '/home' or path == '/')) %}
+    <a href="{{ href }}"
+       class="flex items-center gap-2 px-3 py-2 rounded-xl text-sm
+              {% if active %}
+                bg-gray-900 text-white shadow-sm
+              {% else %}
+                hover:bg-gray-50 text-gray-800
+              {% endif %}">
+      <span>{{ icon }}</span>
+      <span>{{ label }}</span>
+    </a>
+  {%- endmacro %}
 
   <!-- Page layout -->
   <div class="max-w-7xl mx-auto px-4 py-6 flex gap-6">
@@ -34,23 +49,16 @@
 
           <!-- Navigation -->
           <nav class="space-y-1 flex-1">
-            <a href="/home" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
-              🏠 <span>Home</span>
-            </a>
-            <a href="/analytics" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
-              📈 <span>Analytics</span>
-            </a>
-            <a href="/export" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
-              ⬇️ <span>Export</span>
-            </a>
+            {{ nav_item('/home', '🏠', 'Home') }}
+            {{ nav_item('/analytics', '📈', 'Analytics') }}
+            {{ nav_item('/export', '⬇️', 'Export') }}
 
             <div class="h-px bg-gray-200 my-2"></div>
 
-            <a href="/home" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
-              🗓️ <span>Jump to Today</span>
-            </a>
+            {{ nav_item('/home', '🗓️', 'Jump to Today') }}
 
-            <a href="/logout" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm text-red-600">
+            <a href="/logout"
+               class="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-red-600 hover:bg-gray-50">
               🚪 <span>Logout</span>
             </a>
           </nav>

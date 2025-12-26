@@ -5,22 +5,39 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-50">
-<header class="bg-white shadow p-4 flex items-center space-x-2">
-  <div class="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center">✓</div>
-  <h1 class="text-xl font-bold">Streakly</h1>
+
+<body class="bg-gray-50 text-gray-900">
+<header class="bg-white/90 backdrop-blur border-b">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex items-center gap-3">
+    <div class="w-9 h-9 rounded-full bg-green-500 text-white flex items-center justify-center font-bold">✓</div>
+    <div>
+      <div class="text-xl font-semibold leading-tight">Streakly</div>
+      <div class="text-xs text-gray-500">Build habits with calm consistency</div>
+    </div>
+  </div>
 </header>
 
-<div class="flex">
-  <nav class="w-56 bg-gray-100 p-4 min-h-screen">
-    <a href="/home" class="block mb-2 p-2 rounded hover:bg-gray-200">Home</a>
-    <a href="/analytics" class="block mb-2 p-2 rounded hover:bg-gray-200">Analytics</a>
-    <a href="/export" class="block mb-2 p-2 rounded hover:bg-gray-200">Export</a>
-    <a href="/home" class="block mb-2 p-2 rounded hover:bg-gray-200">Jump to Today</a>
-    <a href="/logout" class="block mt-6 p-2 rounded text-red-600 hover:bg-gray-200">Logout</a>
-  </nav>
+<div class="max-w-7xl mx-auto px-4 py-5 flex gap-4">
+  <!-- Sidebar -->
+  <aside class="w-60 hidden md:block">
+    <nav class="bg-white border rounded-2xl p-3 shadow-sm">
+      <a href="/home" class="block px-3 py-2 rounded-xl hover:bg-gray-100 transition">Home</a>
+      <a href="/analytics" class="block px-3 py-2 rounded-xl hover:bg-gray-100 transition">Analytics</a>
+      <a href="/export" class="block px-3 py-2 rounded-xl hover:bg-gray-100 transition">Export</a>
 
-  <main class="flex-1 p-4">
+      <div class="my-3 border-t"></div>
+
+      <a href="/home" class="block px-3 py-2 rounded-xl hover:bg-gray-100 transition">Jump to Today</a>
+      <a href="/logout" class="block px-3 py-2 rounded-xl text-red-600 hover:bg-red-50 transition mt-1">Logout</a>
+    </nav>
+
+    <div class="text-xs text-gray-400 mt-3 px-2">
+      Tip: keep goals small. Consistency beats intensity.
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1">
     {% block content %}{% endblock %}
   </main>
 </div>

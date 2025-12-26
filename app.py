@@ -1,19 +1,12 @@
-from flask import Flask, render_template_string, request, redirect, url_for, send_file, jsonify
+from flask import Flask, request, redirect, url_for, render_template_string, session, send_file, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from datetime import datetime, timedelta
+from datetime import date, timedelta, datetime
 import csv
-from io import StringIO
+import io
 
 app = Flask(__name__)
+app.secret_key = 'supersecret'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///streakly.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = 'your_secret_key'
-
-# Initialize limiter correctly
-limiter = Limiter(app=app, key_func=get_remote_address)
-
 db = SQLAlchemy(app)
 
 # Models
@@ -24,136 +17,153 @@ class User(db.Model):
 
 class Habit(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    name = db.Column(db.String(100), nullable=False)
-    type = db.Column(db.String(10), default='daily')  # daily / weekly / monthly
+    frequency = db.Column(db.String(20), default='daily')  # daily, weekly, monthly
 
-class HabitEntry(db.Model):
+class HabitLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     habit_id = db.Column(db.Integer, db.ForeignKey('habit.id'))
-    date = db.Column(db.Date, nullable=False)
-    completed = db.Column(db.Boolean, default=False)
-    reason = db.Column(db.String(250))
+    date = db.Column(db.Date, default=date.today)
+    done = db.Column(db.Boolean, default=False)
+    reason = db.Column(db.String(255), default='')
 
 with app.app_context():
     db.create_all()
 
-# Base template
-base_template = """
-<!DOCTYPE html>
-<html lang='en'>
+base_template = '''
+<!doctype html>
+<html>
 <head>
-<meta name='viewport' content='width=device-width, initial-scale=1'>
 <title>Streakly</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body{font-family:Arial,sans-serif;margin:0;padding:0;background:#f5f5f5}
-header{background:#4CAF50;color:white;padding:10px;text-align:center;display:flex;align-items:center;}
-.logo{width:40px;height:40px;background:#fff;border-radius:50%;margin-right:10px;display:inline-block;}
-nav{background:#333;color:white;padding:15px;height:100vh;position:fixed;width:200px;}
-nav a{color:white;display:block;margin:10px 0;text-decoration:none;}
-main{margin-left:210px;padding:20px;}
-button{padding:8px 12px;margin:5px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;}
-input{padding:6px;margin:5px;border-radius:4px;border:1px solid #ccc;}
-.calendar-cell{width:40px;height:40px;display:inline-block;margin:2px;text-align:center;line-height:40px;color:white;border-radius:4px;cursor:pointer;}
-.green{background:#4CAF50;}
-.yellow{background:#FF9800;}
-.red{background:#F44336;}
-.gray{background:#BDBDBD;}
-@media(max-width:600px){main{margin-left:0;padding:10px;} nav{width:100%;height:auto;position:relative;}}
+body { font-family: Arial, sans-serif; margin:0; padding:0; }
+header { background:#4CAF50; color:white; padding:10px; display:flex; align-items:center; }
+header .logo { width:40px; height:40px; background:white; border-radius:50%; margin-right:10px; }
+nav { background:#f2f2f2; padding:10px; width:180px; float:left; min-height:100vh; }
+nav a { display:block; margin:5px 0; color:#333; text-decoration:none; }
+.content { margin-left:190px; padding:10px; }
+.calendar td { width:40px; height:40px; text-align:center; }
+.green { background:green; color:white; }
+.yellow { background:orange; color:white; }
+.red { background:red; color:white; }
+.gray { background:#ddd; }
+button { padding:5px 10px; margin:2px; }
 </style>
-<script>
-function toggleHabit(entryId){
- fetch('/toggle_habit/' + entryId, {method:'POST'}).then(r=>r.json()).then(d=>{
-    let cell = document.getElementById('cell-'+entryId);
-    cell.className='calendar-cell '+d.color;
-    document.getElementById('current_streak').innerText = d.current;
-    document.getElementById('best_streak').innerText = d.best;
-    document.getElementById('consistency').innerText = d.consistency;
- });
-}
-function goToToday(){
-    let el = document.getElementById('today');
-    if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
-}
-</script>
 </head>
 <body>
-<header><div class='logo'></div>Streakly</header>
+<header><div class="logo"></div><h2>Streakly</h2></header>
 <nav>
-<a href='{{ url_for("home") }}'>Home</a>
-<a href='{{ url_for("analytics") }}'>Analytics</a>
+<a href="/">Home</a>
+<a href="/analytics">Analytics</a>
+{% if 'user_id' in session %}<a href="/logout">Logout</a>{% endif %}
 </nav>
-<main>
+<div class="content">
 {% block content %}{% endblock %}
-</main>
+</div>
 </body>
 </html>
-"""
+'''
+
+# Utility
+def current_user():
+    if 'user_id' in session:
+        return User.query.get(session['user_id'])
+    return None
 
 # Routes
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method=='POST':
-        return redirect(url_for('home'))
-    return render_template_string("""
-{% extends base_template %}
-{% block content %}
-<h2>Login</h2>
-<form method='post'>
-<input type='text' name='username' placeholder='Username' required>
-<input type='password' name='password' placeholder='Password' required>
-<button type='submit'>Login</button>
-</form>
-<p><a href='{{ url_for("register") }}'>Register</a></p>
-{% endblock %}
-""", base_template=base_template)
-
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if request.method=='POST':
-        return redirect(url_for('login'))
-    return render_template_string("""
-{% extends base_template %}
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if User.query.filter_by(username=username).first():
+            return 'User exists'
+        user = User(username=username, password=password)
+        db.session.add(user)
+        db.session.commit()
+        return redirect('/login')
+    return render_template_string(base_template + '''
 {% block content %}
-<h2>Register</h2>
-<form method='post'>
-<input type='text' name='username' placeholder='Username' required>
-<input type='password' name='password' placeholder='Password' required>
-<input type='password' name='confirm_password' placeholder='Confirm Password' required>
-<button type='submit'>Register</button>
+<h3>Register</h3>
+<form method="post">
+<input name="username" placeholder="Username" required><br>
+<input type="password" name="password" placeholder="Password" required><br>
+<button type="submit">Register</button>
 </form>
-<p><a href='{{ url_for("login") }}'>Login</a></p>
 {% endblock %}
-""", base_template=base_template)
+''')
 
-@app.route('/')
-def home():
-    # placeholder dashboard
-    return render_template_string("""
-{% extends base_template %}
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        user = User.query.filter_by(username=request.form['username'], password=request.form['password']).first()
+        if user:
+            session['user_id'] = user.id
+            return redirect('/')
+        return 'Invalid'
+    return render_template_string(base_template + '''
 {% block content %}
-<h2>Streakly Dashboard</h2>
-<button onclick='goToToday()'>Go to Today</button>
-<p>Current Streak: <span id='current_streak'>0</span> | Best Streak: <span id='best_streak'>0</span> | Consistency: <span id='consistency'>0%</span></p>
-<!-- Calendar & habits would go here -->
+<h3>Login</h3>
+<form method="post">
+<input name="username" placeholder="Username" required><br>
+<input type="password" name="password" placeholder="Password" required><br>
+<button type="submit">Login</button>
+</form>
 {% endblock %}
-""", base_template=base_template)
+''')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/login')
+
+@app.route('/', methods=['GET', 'POST'])
+def home():
+    user = current_user()
+    if not user:
+        return redirect('/login')
+    if request.method == 'POST':
+        habit_name = request.form['habit_name']
+        freq = request.form['frequency']
+        habit = Habit(name=habit_name, user_id=user.id, frequency=freq)
+        db.session.add(habit)
+        db.session.commit()
+    habits = Habit.query.filter_by(user_id=user.id).all()
+    today = date.today()
+    return render_template_string(base_template + '''
+{% block content %}
+<h3>Today's Habits</h3>
+<form method="post">
+<input name="habit_name" placeholder="Habit name" required>
+<select name="frequency"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>
+<button type="submit">Add Habit</button>
+</form>
+<ul>
+{% for habit in habits %}
+<li>{{habit.name}} ({{habit.frequency}})</li>
+{% endfor %}
+</ul>
+{% endblock %}
+''', habits=habits)
 
 @app.route('/analytics')
 def analytics():
-    return render_template_string("""
-{% extends base_template %}
+    user = current_user()
+    if not user:
+        return redirect('/login')
+    habits = Habit.query.filter_by(user_id=user.id).all()
+    return render_template_string(base_template + '''
 {% block content %}
-<h2>Analytics</h2>
-<!-- Analytics charts and reasons -->
+<h3>Analytics</h3>
+<ul>
+{% for habit in habits %}
+<li>{{habit.name}}</li>
+{% endfor %}
+</ul>
 {% endblock %}
-""", base_template=base_template)
+''', habits=habits)
 
-@app.route('/toggle_habit/<int:entry_id>', methods=['POST'])
-def toggle_habit(entry_id):
-    # Placeholder toggle logic
-    color='green'
-    return jsonify({'color':color,'current':1,'best':2,'consistency':'100%'})
-
-if __name__=='__main__':
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -2,7 +2,14 @@
 {% block title %}Home{% endblock %}
 
 {% block content %}
-<h2 class="text-xl font-bold mb-4">Monthly Stats</h2>
+<!-- Month Navigation -->
+<div class="flex justify-between items-center mb-4">
+    <a href="{{ url_for('home', month=prev_month.strftime('%Y-%m')) }}" class="p-2 bg-gray-200 rounded hover:bg-gray-300">Previous Month</a>
+    <h2 class="text-xl font-bold">{{ current_month.strftime('%B %Y') }}</h2>
+    <a href="{{ url_for('home') }}" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600">Today</a>
+</div>
+
+<!-- Monthly Stats -->
 <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 mb-6">
     <div class="p-4 bg-green-100 rounded w-full sm:w-1/2 text-center">
         <p class="font-bold text-lg">Consistency</p>
@@ -17,6 +24,7 @@
 <!-- Add Habit -->
 <div class="mb-6">
     <form method="POST" class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+        <input type="hidden" name="action" value="add">
         <input type="text" name="habit_name" placeholder="Habit Name" required class="p-2 border rounded flex-1">
         <select name="frequency" class="p-2 border rounded">
             <option value="daily">Daily</option>
@@ -27,6 +35,18 @@
     </form>
 </div>
 
+<!-- List Habits with Remove Buttons -->
+<div class="flex flex-wrap gap-2 mb-4">
+    {% for h in habits %}
+    <form method="POST" class="flex items-center space-x-2">
+        <input type="hidden" name="habit_id" value="{{ h.id }}">
+        <input type="hidden" name="action" value="remove">
+        <span class="p-2 bg-gray-200 rounded">{{ h.name }} ({{ h.frequency }})</span>
+        <button type="submit" class="p-1 bg-red-500 text-white rounded hover:bg-red-600">Remove</button>
+    </form>
+    {% endfor %}
+</div>
+
 <!-- Calendar -->
 <div class="grid grid-cols-7 gap-2">
     {% for day in month_days %}
@@ -34,7 +54,7 @@
         {% set total = day.entries|length %}
         {% if day.date > today %}
             {% set color="bg-gray-300" %}
-        {% elif completed==total %}
+        {% elif completed==total and total>0 %}
             {% set color="bg-green-400" %}
         {% elif completed>0 %}
             {% set color="bg-yellow-300" %}
@@ -46,14 +66,33 @@
             {% for entry in day.entries %}
             <form method="POST" class="mt-1">
                 <input type="hidden" name="entry_id" value="{{ entry.id }}">
-                <textarea name="reason" placeholder="Reason..." class="w-full p-1 text-sm rounded">{{ entry.reason }}</textarea>
-                <label class="flex items-center space-x-1 mt-1">
-                    <input type="checkbox" name="completed" {% if entry.completed %}checked{% endif %}>
-                    <span>Done</span>
-                </label>
+                <div class="flex items-center justify-between">
+                    <label class="flex items-center space-x-1">
+                        <input type="checkbox" name="completed" {% if entry.completed %}checked{% endif %}>
+                        <span>{{ entry.habit_id | habit_name }}</span>
+                    </label>
+                </div>
+                <textarea name="reason" placeholder="Reason..." class="w-full p-1 text-sm rounded mt-1">{{ entry.reason }}</textarea>
             </form>
             {% endfor %}
         </div>
     {% endfor %}
 </div>
-{% endblock %}
+
+<script>
+$(document).ready(function(){
+    $('input[type="checkbox"][name="completed"]').change(function(){
+        var entryId = $(this).closest('form').find('input[name="entry_id"]').val();
+        var completed = $(this).is(':checked') ? 1 : 0;
+        $.ajax({
+            url: "{{ url_for('update_completion') }}",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({entry_id: entryId, completed: completed}),
+            success: function(res){
+                console.log("Updated successfully");
+            }
+        });
+    });
+});
+</script>

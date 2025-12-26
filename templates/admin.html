@@ -1,1 +1,23 @@
+{% extends "layout.html" %}
+{% block content %}
+<h3>Admin Dashboard</h3>
+<table class="table table-bordered">
+<tr><th>User</th><th>Habits</th><th>Actions</th></tr>
+{% for user in users %}
+<tr>
+<td>{{ user.username }} {% if user.is_admin %}(Admin){% endif %}</td>
+<td>
+<ul>
+{% for habit in user.habits %}<li>{{ habit.name }} ({{ habit.frequency }})</li>{% endfor %}
+</ul>
+</td>
+<td>
+{% if not user.is_admin %}
+<form method="post" action="{{ url_for('delete_user', user_id=user.id) }}"><button class="btn btn-danger btn-sm">Delete User</button></form>
+{% endif %}
+</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}
 

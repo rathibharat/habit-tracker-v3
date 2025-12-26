@@ -322,6 +322,39 @@ def home():
             "m_consistency": m_consistency,
             "vibe": vibe
         })
+        
+    def month_range(d: datetime.date):
+        first = d.replace(day=1)
+        last_day = calendar.monthrange(d.year, d.month)[1]
+        last = d.replace(day=last_day)
+        return first.isoformat(), last.isoformat()
+
+    # Overall consistency for viewed month and previous month (2 numbers, no charts)
+    this_start, this_end = month_range(current_month)
+    prev_month_first = (current_month - datetime.timedelta(days=1)).replace(day=1)
+    last_start, last_end = month_range(prev_month_first)
+
+    this_rows = db.execute("""
+        SELECT he.completed
+        FROM habit_entry he
+        JOIN habit h ON h.id = he.habit_id
+        WHERE h.user_id=? AND he.date>=? AND he.date<=?
+    """, (user_id, this_start, this_end)).fetchall()
+
+    last_rows = db.execute("""
+        SELECT he.completed
+        FROM habit_entry he
+        JOIN habit h ON h.id = he.habit_id
+        WHERE h.user_id=? AND he.date>=? AND he.date<=?
+    """, (user_id, last_start, last_end)).fetchall()
+
+    this_total = len(this_rows)
+    this_done = sum(1 for r in this_rows if r["completed"] == 1)
+    this_pct = int((this_done / this_total) * 100) if this_total else 0
+
+    last_total = len(last_rows)
+    last_done = sum(1 for r in last_rows if r["completed"] == 1)
+    last_pct = int((last_done / last_total) * 100) if last_total else 0
 
 
     return render_template(
@@ -332,7 +365,10 @@ def home():
         today=today,
         current_month=current_month,
         prev_month=prev_month,
-        next_month=next_month
+        next_month=next_month,
+        this_pct=this_pct,
+        last_pct=last_pct,
+
     )
 
 
@@ -367,6 +403,23 @@ def update_reason():
     """, (session["user_id"], date, reason))
     db.commit()
     return jsonify(success=True)
+
+@app.route("/mark_all_done_today", methods=["POST"])
+@login_required
+def mark_all_done_today():
+    db = get_db()
+    user_id = session["user_id"]
+    today = datetime.date.today().isoformat()
+
+    db.execute("""
+        UPDATE habit_entry
+        SET completed=1
+        WHERE date=?
+          AND habit_id IN (SELECT id FROM habit WHERE user_id=?)
+    """, (today, user_id))
+    db.commit()
+    return jsonify(success=True)
+
 
 # ---------------- Analytics ----------------
 @app.route("/analytics")

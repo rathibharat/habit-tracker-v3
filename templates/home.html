@@ -1,101 +1,59 @@
 {% extends "layout.html" %}
-{% block title %}Home{% endblock %}
-
 {% block content %}
-<!-- Month Navigation -->
-<div class="flex justify-between items-center mb-4">
-    <a href="{{ url_for('home', month=prev_month.strftime('%Y-%m')) }}" class="p-2 bg-gray-200 rounded hover:bg-gray-300">Previous Month</a>
-    <h2 class="text-xl font-bold">{{ current_month.strftime('%B %Y') }}</h2>
-    <a href="{{ url_for('home') }}" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600">Today</a>
+
+<div class="flex justify-between mb-4">
+    <a href="?month={{ prev_month.strftime('%Y-%m') }}">← Prev</a>
+    <h2 class="font-bold">{{ current_month.strftime('%B %Y') }}</h2>
+    <a href="/home">Today</a>
 </div>
 
-<!-- Monthly Stats -->
-<div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 mb-6">
-    <div class="p-4 bg-green-100 rounded w-full sm:w-1/2 text-center">
-        <p class="font-bold text-lg">Consistency</p>
-        <p class="text-2xl">{{ consistency }}%</p>
-    </div>
-    <div class="p-4 bg-blue-100 rounded w-full sm:w-1/2 text-center">
-        <p class="font-bold text-lg">Streak</p>
-        <p class="text-2xl">{{ streak }} days</p>
-    </div>
-</div>
+<form method="POST" class="mb-4 flex gap-2">
+    <input type="hidden" name="action" value="add">
+    <input name="habit_name" placeholder="Habit" required class="border p-1">
+    <select name="frequency" class="border p-1">
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+    </select>
+    <button class="bg-green-500 text-white px-2">Add</button>
+</form>
 
-<!-- Add Habit -->
-<div class="mb-6">
-    <form method="POST" class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-        <input type="hidden" name="action" value="add">
-        <input type="text" name="habit_name" placeholder="Habit Name" required class="p-2 border rounded flex-1">
-        <select name="frequency" class="p-2 border rounded">
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-        </select>
-        <button type="submit" class="p-2 bg-green-500 text-white rounded hover:bg-green-600">Add Habit</button>
-    </form>
-</div>
-
-<!-- List Habits with Remove Buttons -->
-<div class="flex flex-wrap gap-2 mb-4">
-    {% for h in habits %}
-    <form method="POST" class="flex items-center space-x-2">
-        <input type="hidden" name="habit_id" value="{{ h.id }}">
-        <input type="hidden" name="action" value="remove">
-        <span class="p-2 bg-gray-200 rounded">{{ h.name }} ({{ h.frequency }})</span>
-        <button type="submit" class="p-1 bg-red-500 text-white rounded hover:bg-red-600">Remove</button>
-    </form>
-    {% endfor %}
-</div>
-
-<!-- Calendar -->
 <div class="grid grid-cols-7 gap-2">
-    {% for day in month_days %}
-        {% set completed = day.entries|selectattr("completed")|select("equalto",1)|list|length %}
-        {% set total = day.entries|length %}
-        {% if day.date > today %}
-            {% set color="bg-gray-300" %}
-        {% elif completed==total and total>0 %}
-            {% set color="bg-green-400" %}
-        {% elif completed>0 %}
-            {% set color="bg-yellow-300" %}
-        {% else %}
-            {% set color="bg-red-400" %}
-        {% endif %}
-        <div class="p-2 rounded {{ color }} flex flex-col">
-            <div class="font-bold">{{ day.date.day }}</div>
-            {% for entry in day.entries %}
-            <form method="POST" class="mt-1">
-                <input type="hidden" name="entry_id" value="{{ entry.id }}">
-                <div class="flex items-center justify-between">
-                    <label class="flex items-center space-x-1">
-                        <input type="checkbox" name="completed" {% if entry.completed %}checked{% endif %}>
-                        <span>{{ entry.habit_id | habit_name }}</span>
-                    </label>
-                </div>
-                <textarea name="reason" placeholder="Reason..." class="w-full p-1 text-sm rounded mt-1">{{ entry.reason }}</textarea>
-            </form>
-            {% endfor %}
-        </div>
-    {% endfor %}
+{% for day in month_days %}
+<div class="p-2 rounded day-box
+{% if day.date > today %}bg-gray-300
+{% elif day.entries|selectattr('completed')|list|length == day.entries|length and day.entries|length>0 %}bg-green-400
+{% elif day.entries|selectattr('completed')|list|length > 0 %}bg-yellow-300
+{% else %}bg-red-400{% endif %}">
+
+<strong>{{ day.date.day }}</strong>
+
+{% for e in day.entries %}
+<label class="block">
+<input type="checkbox" data-entry="{{ e.id }}" {% if e.completed %}checked{% endif %}>
+{{ e.habit_id | habit_name }}
+</label>
+{% endfor %}
+
+<textarea class="w-full text-sm mt-2 reason"
+data-date="{{ day.date }}">{{ day.reason }}</textarea>
+</div>
+{% endfor %}
 </div>
 
-<!-- AJAX for checkbox completion -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
-$(document).ready(function(){
-    $('input[type="checkbox"][name="completed"]').change(function(){
-        var entryId = $(this).closest('form').find('input[name="entry_id"]').val();
-        var completed = $(this).is(':checked') ? 1 : 0;
-        $.ajax({
-            url: "{{ url_for('update_completion') }}",
-            type: "POST",
-            contentType: "application/json",
-            data: JSON.stringify({entry_id: entryId, completed: completed}),
-            success: function(res){
-                console.log("Updated successfully");
-            }
-        });
-    });
+document.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+cb.onchange=()=>{
+fetch("/update_completion",{method:"POST",headers:{"Content-Type":"application/json"},
+body:JSON.stringify({entry_id:cb.dataset.entry,completed:cb.checked?1:0})});
+let box=cb.closest(".day-box");
+let c=box.querySelectorAll("input:checked").length;
+let t=box.querySelectorAll("input").length;
+box.className="p-2 rounded day-box "+(c==t&&t?"bg-green-400":c?"bg-yellow-300":"bg-red-400");
+}});
+document.querySelectorAll(".reason").forEach(r=>{
+r.onblur=()=>fetch("/update_reason",{method:"POST",headers:{"Content-Type":"application/json"},
+body:JSON.stringify({date:r.dataset.date,reason:r.value})});
 });
 </script>
 

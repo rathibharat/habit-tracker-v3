@@ -3,5 +3,3 @@ Flask-SQLAlchemy
 Werkzeug
 itsdangerous
 Flask-Limiter
-Flask-Mail
-pytest

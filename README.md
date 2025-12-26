@@ -1,79 +1,191 @@
-# Habit Tracker v3
+✅ Streakly
 
-**Final version of the Habit Tracker app**, optimized for minimal friction and behavioral effectiveness.
+Streakly is a minimal, clean habit-tracking web app built with Flask.
+It helps you build consistency by tracking daily, weekly, and monthly habits with streaks, analytics, and a calendar-based UI.
 
----
+Designed with a mobile-first, Apple-like UI and deployed easily on Render.
 
-## Features
+✨ Features
 
-- Daily, weekly, and monthly habit scheduling
-- Per-habit streak dashboard
-- Missed habit reminders (gentle banner in-app)
-- Clean, minimal UI with Tailwind CSS
-- Multi-user support with authentication (email + password)
-- Password reset / forgot password functionality
-- CSV export per user
-- Admin dashboard for monitoring users and goals
-- Basic rate limiting & security hardening
+🔐 User authentication (login & register)
 
----
+📅 Calendar-based habit tracking (Mon–Sun layout)
 
-## Tech Stack
+✅ Daily, Weekly (Saturday), Monthly (2nd last day) habits
 
-- Python 3
-- Flask (Web framework)
-- SQLAlchemy (ORM)
-- PostgreSQL (optional, default SQLite supported)
-- Tailwind CSS (UI)
-- Flask-Mail (optional email reminders)
-- Flask-Limiter (basic security / rate limiting)
+🔥 Habit streak tracking
 
----
+📊 Analytics (consistency %, streak rate)
 
-## Setup & Deployment
+📝 Daily reason tracking (why habits were missed)
 
-### 1. Clone or Upload Repository
-- **GitHub:** Upload files (`app.py`, `requirements.txt`, `test_app.py`, `README.md`)  
-- **Render:** Connect the GitHub repo and create a Web Service.
+📤 Export data (CSV)
 
-### 2. Environment Variables
-Set the following on Render (or locally):
+📱 Mobile-friendly UI with:
 
-SECRET_KEY=<your_secure_key>
-DATABASE_URL=<PostgreSQL URL, optional>
-ADMIN_EMAIL=<your admin email>
-EMAIL_USER=<optional, for email reminders>
-EMAIL_PASS=<optional, for email reminders>
+Today View toggle
+
+Swipe between days
+
+Tap-to-check habit rows
+
+🧠 Smart empty states & onboarding
+
+⏱ Rate limiting for security
+
+💾 Persistent storage support on Render
+
+🛠 Tech Stack
+
+Backend: Flask (Python)
+
+Frontend: Jinja2 + Tailwind CSS (CDN)
+
+Database: SQLite (with Render persistent disk)
+
+Auth: Werkzeug password hashing
+
+Security: Flask-Limiter
+
+Deployment: Render
+
+📂 Project Structure
+streakly/
+│
+├── app.py
+├── requirements.txt
+├── README.md
+│
+├── templates/
+│   ├── layout.html
+│   ├── login.html
+│   ├── register.html
+│   ├── home.html
+│   ├── analytics.html
+│   └── export.html
+│
+└── static/   (optional)
+
+🚀 Run Locally
+1️⃣ Clone the repo
+git clone https://github.com/your-username/streakly.git
+cd streakly
+
+2️⃣ Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+3️⃣ Install dependencies
+pip install -r requirements.txt
+
+4️⃣ Set environment variables
+export SECRET_KEY="dev-secret"
+
+5️⃣ Run the app
+python app.py
 
 
-### 3. Build & Start Commands
-- **Build:** `pip install -r requirements.txt`  
-- **Start:** `python app.py`  
+Open: http://127.0.0.1:5000
 
-Render will deploy and provide a public URL.
+☁️ Deploy on Render
+1️⃣ Create a new Web Service
 
----
+Connect your GitHub repo
 
-## Usage
+Runtime: Python
 
-1. Open the app URL in your browser or phone.  
-2. Register a new user.  
-3. Add daily, weekly, or monthly habits.  
-4. Mark habits as completed daily on the calendar.  
-5. Check the dashboard for streaks and consistency.  
-6. Missed habits from yesterday will appear in a gentle banner.  
-7. Export your habits and progress as CSV from the export page.  
+Start command:
 
----
+gunicorn app:app
 
-## Testing
+2️⃣ Add environment variables
+Key	Value
+SECRET_KEY	long-random-string
+ADMIN_EMAIL	your@email.com
+💾 IMPORTANT: Persistent Storage (Required)
 
-Run unit tests locally or on the server:
+Streakly uses SQLite.
+Render containers have ephemeral filesystems, so you must add a persistent disk or you will lose data when the app sleeps.
 
-```bash
-pytest test_app.py
+✅ How to fix data loss
+
+In Render → Service → Disks
+
+Add disk:
+
+Mount path: /var/data
+
+Update in app.py:
+
+DATABASE = "/var/data/streakly.db"
 
 
+Now your data survives:
 
----
+Sleep / wake
 
+Restarts
+
+Redeploys
+
+🔐 Security Notes
+
+Passwords are hashed (Werkzeug)
+
+Rate limiting enabled (Flask-Limiter)
+
+Sessions protected via SECRET_KEY
+
+Auth pages hidden from logged-in users
+
+📊 Analytics Explained
+
+Consistency %: habits completed ÷ habits scheduled
+
+Streak: consecutive days completed per habit
+
+Monthly comparison: this month vs last month
+
+Reasons help identify patterns in missed habits
+
+📱 Mobile UX Highlights
+
+Today-first design
+
+Swipe left/right to change day
+
+Tap entire row to toggle habit
+
+Sticky actions & toast feedback
+
+Clean typography & spacing
+
+🧭 Roadmap (Optional Ideas)
+
+Email reminders (Render cron job)
+
+Push notifications
+
+Habit categories & tags
+
+Dark mode
+
+Postgres support
+
+🤝 Contributing
+
+Contributions are welcome!
+
+Fork the repo
+
+Create a feature branch
+
+Submit a pull request
+
+📄 License
+
+MIT License
+
+🙌 Acknowledgements
+
+Built with care to encourage consistency over intensity.

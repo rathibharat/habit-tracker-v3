@@ -97,6 +97,7 @@ def login():
         user = db.execute("SELECT * FROM user WHERE email=?", (email,)).fetchone()
         if user and check_password_hash(user["password"], password):
             session["user_id"] = user["id"]
+            session["user_email"] = user["email"] 
             return redirect("/home")
 
         return render_template("login.html", error="Invalid credentials")

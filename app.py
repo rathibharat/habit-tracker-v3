@@ -53,6 +53,12 @@ def inject_user():
         return dict(current_user=user)
     return dict(current_user=None)
 
+# Context processor to make datetime available in all templates
+@app.context_processor
+def utility_processor():
+    import datetime
+    return dict(datetime=datetime)
+
 # Authentication
 @app.route("/register", methods=["GET","POST"])
 @limiter.limit("5 per minute")

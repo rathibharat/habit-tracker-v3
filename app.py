@@ -8,7 +8,12 @@ app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
 # Rate limiter
-limiter = Limiter(app, key_func=get_remote_address, default_limits=["200/day", "50/hour"])
+limiter = Limiter(
+    key_func=get_remote_address,  # specify the key function
+    default_limits=["200 per day", "50 per hour"]
+)
+limiter.init_app(app)  # attach to the Flask app
+
 
 # Database helper
 def get_db():

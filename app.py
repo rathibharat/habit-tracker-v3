@@ -16,9 +16,9 @@ db = SQLAlchemy(app)
 
 # Initialize Limiter with default in-memory storage
 limiter = Limiter(
-    app,
+    app=app,
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]  # optional, your choice
+    default_limits=["200 per day", "50 per hour"]
 )
 
 # Models

@@ -35,6 +35,43 @@
   </div>
 </div>
 
+
+{% if habits|length == 0 %}
+  <div class="mb-6 bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+    <div class="flex items-start gap-4">
+      <div class="w-11 h-11 rounded-2xl bg-green-600 text-white flex items-center justify-center text-xl shadow-sm">
+        ✓
+      </div>
+      <div class="min-w-0">
+        <div class="text-lg font-semibold">Welcome to Streakly</div>
+        <div class="text-sm text-gray-600 mt-1">
+          Add your first habit to start tracking. Streakly will automatically place it on your calendar from today onward.
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+            <div class="text-sm font-semibold">1) Add a habit</div>
+            <div class="text-xs text-gray-500 mt-1">Example: “Walk 20 min”</div>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+            <div class="text-sm font-semibold">2) Check it daily</div>
+            <div class="text-xs text-gray-500 mt-1">Tap the row to toggle</div>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+            <div class="text-sm font-semibold">3) Add a reason</div>
+            <div class="text-xs text-gray-500 mt-1">Helps analytics later</div>
+          </div>
+        </div>
+
+        <div class="mt-4 text-xs text-gray-500">
+          Tip: Start with 1–2 habits to build momentum.
+        </div>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+
 <!-- Habit cards: streak + month consistency -->
 <div class="mb-6">
   <div class="flex items-baseline justify-between mb-3">

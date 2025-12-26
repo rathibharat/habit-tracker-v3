@@ -2,14 +2,41 @@
 {% block title %}Analytics{% endblock %}
 
 {% block content %}
-<h2 class="text-xl font-bold mb-4">Analytics</h2>
-<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-    {% for habit in data %}
-    <div class="p-4 bg-white rounded shadow">
-        <h3 class="font-bold text-lg mb-2">{{ habit.name }}</h3>
-        <p>Consistency: <span class="font-semibold">{{ habit.consistency }}%</span></p>
-        <p>Max Streak: <span class="font-semibold">{{ habit.streak }} days</span></p>
-    </div>
-    {% endfor %}
+<h2 class="text-2xl font-bold mb-4 text-center">Habit Analytics</h2>
+
+<div class="overflow-x-auto">
+    <table class="min-w-full bg-white border rounded shadow-sm">
+        <thead>
+            <tr class="bg-gray-200 text-gray-700 uppercase text-sm">
+                <th class="p-3 text-left">Habit</th>
+                <th class="p-3 text-left">Consistency (%)</th>
+                <th class="p-3 text-left">Longest Streak (days)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for habit in data %}
+            <tr class="border-b hover:bg-gray-50">
+                <td class="p-3">{{ habit.name }}</td>
+                <td class="p-3">
+                    <div class="w-full bg-gray-200 rounded h-4">
+                        <div class="bg-green-400 h-4 rounded" style="width: {{ habit.consistency }}%"></div>
+                    </div>
+                    <span class="text-sm">{{ habit.consistency }}%</span>
+                </td>
+                <td class="p-3">{{ habit.streak }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3" class="p-3 text-center text-gray-500">No habits found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="mt-6 flex justify-center">
+    <a href="{{ url_for('home') }}" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+        Back to Home
+    </a>
 </div>
 {% endblock %}

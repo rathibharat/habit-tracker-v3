@@ -1,35 +1,59 @@
 {% extends "layout.html" %}
+{% block title %}Home{% endblock %}
+
 {% block content %}
-<h3>{{ datetime.date(year, month, 1).strftime('%B %Y') }}</h3>
+<h2 class="text-xl font-bold mb-4">Monthly Stats</h2>
+<div class="flex space-x-4 mb-6">
+    <div class="p-4 bg-green-100 rounded w-1/2 text-center">
+        <p class="font-bold text-lg">Consistency</p>
+        <p class="text-2xl">{{ consistency }}%</p>
+    </div>
+    <div class="p-4 bg-blue-100 rounded w-1/2 text-center">
+        <p class="font-bold text-lg">Streak</p>
+        <p class="text-2xl">{{ streak }} days</p>
+    </div>
+</div>
 
-<form method="POST">
-    <input type="text" name="name" placeholder="Habit Name" required>
-    <select name="frequency">
-        <option value="daily">Daily</option>
-        <option value="weekly">Weekly</option>
-        <option value="monthly">Monthly</option>
-    </select>
-    <button type="submit" class="btn btn-primary btn-sm">Add Habit</button>
-</form>
+<!-- Add Habit -->
+<div class="mb-6">
+    <form method="POST" class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+        <input type="text" name="habit_name" placeholder="Habit Name" required class="p-2 border rounded flex-1">
+        <select name="frequency" class="p-2 border rounded">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+        </select>
+        <button type="submit" class="p-2 bg-green-500 text-white rounded hover:bg-green-600">Add Habit</button>
+    </form>
+</div>
 
-<table class="table table-bordered mt-3">
-  <tr>
-    {% for day in calendar_data %}
-    <td style="background-color: {{ day.color }}; vertical-align: top;">
-      <strong>{{ day.day }}</strong><br>
-      {% for habit in day.habits %}
-      <div>
-        <input type="checkbox" data-habit-id="{{ habit.id }}" data-day="{{ day.day }}"
-               {% if habit.done %}checked{% endif %}
-               {% if not day.editable %}disabled{% endif %}>
-        {{ habit.name }}
-      </div>
-      {% endfor %}
-      {% if day.show_reason %}
-      <textarea placeholder="Reason..." {% if not day.editable %}disabled{% endif %}></textarea>
-      {% endif %}
-    </td>
+<!-- Calendar -->
+<div class="grid grid-cols-7 gap-2">
+    {% for day in month_days %}
+        {% set completed = day.entries|selectattr("completed")|list|length %}
+        {% set total = day.entries|length %}
+        {% if day.date > today %}
+            {% set color="bg-gray-300" %}
+        {% elif completed==total %}
+            {% set color="bg-green-400" %}
+        {% elif completed>0 %}
+            {% set color="bg-yellow-300" %}
+        {% else %}
+            {% set color="bg-red-400" %}
+        {% endif %}
+    <div class="p-2 rounded {{ color }} flex flex-col">
+        <div class="font-bold">{{ day.date.day }}</div>
+        {% for entry in day.entries %}
+        <form method="POST" class="mt-1">
+            <input type="hidden" name="entry_id" value="{{ entry.id }}">
+            <textarea name="reason" placeholder="Reason..." class="w-full p-1 text-sm rounded">{{ entry.reason }}</textarea>
+            <label class="flex items-center space-x-1 mt-1">
+                <input type="checkbox" name="completed" {% if entry.completed %}checked{% endif %} onchange="this.form.submit()">
+                <span>Done</span>
+            </label>
+        </form>
+        {% endfor %}
+    </div>
     {% endfor %}
-  </tr>
-</table>
+</div>
 {% endblock %}

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Streakly - {% block title %}{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen flex flex-col">
     <!-- Header -->
@@ -30,5 +31,24 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+
+    <!-- AJAX script for habit completion -->
+    <script>
+    $(document).ready(function(){
+        $('input[type="checkbox"][name="completed"]').change(function(){
+            var entryId = $(this).closest('form').find('input[name="entry_id"]').val();
+            var completed = $(this).is(':checked') ? 1 : 0;
+            $.ajax({
+                url: "{{ url_for('update_completion') }}",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({entry_id: entryId, completed: completed}),
+                success: function(res){
+                    console.log("Updated successfully");
+                }
+            });
+        });
+    });
+    </script>
 </body>
 </html>

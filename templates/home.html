@@ -1,1 +1,104 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<h3 class="mb-3">Month: {{ month }} / {{ year }}</h3>
+
+<!-- Month navigation -->
+<div class="mb-3 d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('home', month=month-1 if month>1 else 12, year=year if month>1 else year-1) }}" class="btn btn-secondary btn-sm">Previous Month</a>
+    <a href="{{ url_for('home', month=month+1 if month<12 else 1, year=year if month<12 else year+1) }}" class="btn btn-secondary btn-sm">Next Month</a>
+    <a href="{{ url_for('jump_today') }}" class="btn btn-primary btn-sm">Jump to Today</a>
+</div>
+
+<!-- Add new habit -->
+<div class="mb-3">
+    <form method="post" class="d-flex flex-wrap gap-2">
+        <input type="text" name="name" placeholder="Habit Name" class="form-control" required>
+        <select name="frequency" class="form-select">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+        </select>
+        <button class="btn btn-success btn-sm">Add Habit</button>
+    </form>
+</div>
+
+<!-- Existing habits list -->
+<div class="mb-3">
+    <h5>Existing Habits</h5>
+    <ul class="list-group">
+        {% for habit in habits %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            {{ habit.name }} ({{ habit.frequency }})
+            <form method="post" action="{{ url_for('remove_habit', habit_id=habit.id) }}">
+                <button class="btn btn-danger btn-sm">Remove</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- Stats -->
+<div class="mb-3">
+    <div><strong>Consistency:</strong> {{ consistency }}% | <strong>Streak:</strong> {{ streak }} days</div>
+</div>
+
+<!-- Legend -->
+<div class="mb-2 d-flex gap-2 flex-wrap align-items-center">
+    <div style="width:20px;height:20px;background-color:green;"></div> All habits done
+    <div style="width:20px;height:20px;background-color:yellow;"></div> Some habits done
+    <div style="width:20px;height:20px;background-color:red;"></div> None done
+    <div style="width:20px;height:20px;background-color:gray;"></div> Future
+</div>
+
+<!-- Calendar grid -->
+<div class="calendar-grid" style="display:grid; grid-template-columns: repeat(7,1fr); gap:5px;">
+    {% for dayname in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+    <div style="font-weight:bold;text-align:center;">{{ dayname }}</div>
+    {% endfor %}
+
+    {% set first_weekday = (datetime.date(year,month,1).weekday()+1) %}
+    {% for _ in range(first_weekday) %}<div></div>{% endfor %}
+
+    {% for day in calendar_data %}
+    <div class="day p-1" id="day-{{ day.day }}" style="background-color:{{ day.color }}; min-height:100px; border-radius:5px; position:relative;">
+        <div style="font-weight:bold;">{{ day.day }}</div>
+
+        {% for habit in day.habits %}
+        <div style="font-size:0.8rem;">
+            <input type="checkbox" {% if habit.done %}checked{% endif %} 
+                   onclick="toggleHabit({{ habit.id }}, {{ day.day }}, {{ month }}, {{ year }})">
+            {{ habit.name }}
+        </div>
+        {% endfor %}
+
+        {% if day.show_reason %}
+        <div style="margin-top:5px;">
+            <input type="text" id="reason-day-{{ day.day }}" placeholder="Enter reason for incomplete habits" style="width:100%;">
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+function toggleHabit(habitId, day, month, year){
+    let reasonInput = document.getElementById(`reason-day-${day}`);
+    let reason = reasonInput ? reasonInput.value : '';
+    let formData = new FormData();
+    formData.append('month', month);
+    formData.append('year', year);
+    formData.append('reason', reason);
+
+    fetch(`/complete/${habitId}/${day}`, { method:'POST', body:formData })
+    .then(res => res.json())
+    .then(data => {
+        if(data.status==='ok'){
+            document.getElementById(`day-${day}`).style.backgroundColor = data.color;
+        }
+    });
+}
+</script>
+
+{% endblock %}
 

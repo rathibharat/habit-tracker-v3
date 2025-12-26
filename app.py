@@ -8,10 +8,18 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
+import calendar
 
 # ---- App Setup ----
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "supersecretkey")
+
+# --- Jinja filter to get habit name from habit_id ---
+@app.template_filter('habit_name')
+def habit_name_filter(habit_id):
+    db = get_db()
+    h = db.execute("SELECT name FROM habit WHERE id=?", (habit_id,)).fetchone()
+    return h["name"] if h else "Unknown"
 
 # ---- Flask-Limiter with optional Redis ----
 REDIS_URL = os.environ.get("REDIS_URL", None)
@@ -126,65 +134,107 @@ def logout():
     return redirect(url_for("login"))
 
 # ---- Home / Calendar ----
+
 @app.route("/", methods=["GET","POST"])
 @app.route("/home", methods=["GET","POST"])
 @login_required
 def home():
     db = get_db()
     user_id = session["user_id"]
+    today = datetime.date.today()
 
-    # Add habit
-    if request.method=="POST" and request.form.get("habit_name"):
-        db.execute("INSERT INTO habit(user_id,name,frequency) VALUES(?,?,?)",
-                   (user_id, request.form["habit_name"], request.form["frequency"]))
+    # --- Month navigation ---
+    month_str = request.args.get("month")
+    if month_str:
+        try:
+            year, month = map(int, month_str.split("-"))
+            current_month = datetime.date(year, month, 1)
+        except:
+            current_month = today.replace(day=1)
+    else:
+        current_month = today.replace(day=1)
+
+    # --- Add Habit ---
+    if request.method=="POST" and request.form.get("habit_name") and request.form.get("action")=="add":
+        habit_name = request.form["habit_name"]
+        frequency = request.form["frequency"]
+        db.execute("INSERT INTO habit(user_id,name,frequency) VALUES(?,?,?)", (user_id, habit_name, frequency))
+        db.commit()
+        habit_id = db.execute("SELECT id FROM habit WHERE user_id=? AND name=?", (user_id, habit_name)).fetchone()["id"]
+
+        # Create future habit entries from today onwards
+        _, days_in_month = calendar.monthrange(today.year, today.month)
+        start_date = max(today, current_month)
+        for day_offset in range(0, 31):
+            day = start_date + datetime.timedelta(days=day_offset)
+            if day.month != current_month.month:
+                break
+            add_entry = False
+            if frequency=="daily":
+                add_entry=True
+            elif frequency=="weekly" and day.weekday()==5:
+                add_entry=True
+            elif frequency=="monthly" and day.day==(last_day_of_month(day)-1):
+                add_entry=True
+            if add_entry:
+                db.execute("INSERT INTO habit_entry(habit_id,date) VALUES(?,?)", (habit_id, day.isoformat()))
         db.commit()
 
-    # Save reason
+    # --- Remove Habit ---
+    if request.method=="POST" and request.form.get("habit_id") and request.form.get("action")=="remove":
+        habit_id = request.form["habit_id"]
+        db.execute("DELETE FROM habit_entry WHERE habit_id=? AND date>=?", (habit_id, today.isoformat()))
+        db.execute("DELETE FROM habit WHERE id=? AND user_id=?", (habit_id, user_id))
+        db.commit()
+
+    # --- Save reason ---
     if request.method=="POST" and request.form.get("reason") and request.form.get("entry_id"):
-        db.execute("UPDATE habit_entry SET reason=? WHERE id=?",
-                   (request.form["reason"], request.form["entry_id"]))
+        db.execute("UPDATE habit_entry SET reason=? WHERE id=?", (request.form["reason"], request.form["entry_id"]))
         db.commit()
 
+    # --- Fetch habits ---
     habits = db.execute("SELECT * FROM habit WHERE user_id=?", (user_id,)).fetchall()
 
-    # Calendar setup
-    today = datetime.date.today()
-    first_day = today.replace(day=1)
+    # --- Calendar setup ---
     month_days = []
-    for i in range(31):
-        try:
-            day = first_day + datetime.timedelta(days=i)
-            if day.month != first_day.month:
-                break
-            day_entries = []
-            for h in habits:
-                entry = db.execute("SELECT * FROM habit_entry WHERE habit_id=? AND date=?",
-                                   (h["id"], day.isoformat())).fetchone()
-                if not entry:
-                    add_entry = False
-                    if h["frequency"]=="daily":
-                        add_entry = True
-                    elif h["frequency"]=="weekly" and day.weekday()==5:
-                        add_entry = True
-                    elif h["frequency"]=="monthly" and day.day==(last_day_of_month(day)-1):
-                        add_entry = True
-                    if add_entry:
-                        db.execute("INSERT INTO habit_entry(habit_id,date) VALUES(?,?)", (h["id"], day.isoformat()))
-                        db.commit()
-                        entry = db.execute("SELECT * FROM habit_entry WHERE habit_id=? AND date=?",
-                                           (h["id"], day.isoformat())).fetchone()
+    _, num_days = calendar.monthrange(current_month.year, current_month.month)
+    for day_num in range(1, num_days+1):
+        day = datetime.date(current_month.year, current_month.month, day_num)
+        day_entries = []
+        for h in habits:
+            entry = db.execute("SELECT * FROM habit_entry WHERE habit_id=? AND date=?", (h["id"], day.isoformat())).fetchone()
+            if not entry and day >= today:
+                # future entries missing? create it
+                add_entry = False
+                if h["frequency"]=="daily":
+                    add_entry=True
+                elif h["frequency"]=="weekly" and day.weekday()==5:
+                    add_entry=True
+                elif h["frequency"]=="monthly" and day.day==(last_day_of_month(day)-1):
+                    add_entry=True
+                if add_entry:
+                    db.execute("INSERT INTO habit_entry(habit_id,date) VALUES(?,?)", (h["id"], day.isoformat()))
+                    db.commit()
+                    entry = db.execute("SELECT * FROM habit_entry WHERE habit_id=? AND date=?", (h["id"], day.isoformat())).fetchone()
+            if entry:
                 day_entries.append(entry)
-            month_days.append({"date": day, "entries": day_entries})
-        except:
-            break
+        month_days.append({"date": day, "entries": day_entries})
 
+    # --- Stats ---
     total_entries = sum([len(d["entries"]) for d in month_days])
     completed_entries = sum([sum([1 for e in d["entries"] if e["completed"]==1]) for d in month_days])
     consistency = int((completed_entries/total_entries)*100) if total_entries>0 else 0
     streak = calculate_streak(month_days)
 
+    # --- Month Navigation URLs ---
+    prev_month = (current_month.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
+    next_month = (current_month.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+
     return render_template("home.html", habits=habits, month_days=month_days, today=today,
-                           consistency=consistency, streak=streak)
+                           consistency=consistency, streak=streak,
+                           current_month=current_month,
+                           prev_month=prev_month, next_month=next_month)
+
 
 # ---- Analytics ----
 @app.route("/analytics")

@@ -1,25 +1,28 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Streakly</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <title>Streakly</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50">
 <header class="bg-white shadow p-4 flex items-center space-x-2">
-    <div class="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center">✓</div>
-    <h1 class="text-xl font-bold">Streakly</h1>
+  <div class="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center">✓</div>
+  <h1 class="text-xl font-bold">Streakly</h1>
 </header>
 
 <div class="flex">
-<nav class="w-48 bg-gray-100 p-4">
-    <a href="/home" class="block mb-2">Home</a>
-    <a href="/home" class="block mb-2">Jump to Today</a>
-    <a href="/logout" class="block mt-4 text-red-500">Logout</a>
-</nav>
+  <nav class="w-56 bg-gray-100 p-4 min-h-screen">
+    <a href="/home" class="block mb-2 p-2 rounded hover:bg-gray-200">Home</a>
+    <a href="/analytics" class="block mb-2 p-2 rounded hover:bg-gray-200">Analytics</a>
+    <a href="/export" class="block mb-2 p-2 rounded hover:bg-gray-200">Export</a>
+    <a href="/home" class="block mb-2 p-2 rounded hover:bg-gray-200">Jump to Today</a>
+    <a href="/logout" class="block mt-6 p-2 rounded text-red-600 hover:bg-gray-200">Logout</a>
+  </nav>
 
-<main class="flex-1 p-4">
-{% block content %}{% endblock %}
-</main>
+  <main class="flex-1 p-4">
+    {% block content %}{% endblock %}
+  </main>
 </div>
 </body>
 </html>

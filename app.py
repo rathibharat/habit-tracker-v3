@@ -163,26 +163,26 @@ def home():
                 )
                 habit_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-                # Create entries only from TODAY forward (only for visible month range when needed)
-                # We'll create for the current month from max(today, month start) -> month end.
+                # create entries only from today onward in the current view month (no backfill)
                 month_last = calendar.monthrange(current_month.year, current_month.month)[1]
                 start_day = 1
+
                 if current_month.year == today.year and current_month.month == today.month:
                     start_day = today.day
                 elif current_month < today.replace(day=1):
-                    # past month view: do not backfill
-                    start_day = month_last + 1  # no loop
-                else:
-                    start_day = 1
+                    start_day = month_last + 1  # don't create in past month view
 
                 for d in range(start_day, month_last + 1):
                     date = datetime.date(current_month.year, current_month.month, d)
                     if date < today:
                         continue
 
-                    if freq == "daily" or \
-                       (freq == "weekly" and date.weekday() == 5) or \
-                       (freq == "monthly" and d == month_last - 1):
+                    should_exist = (
+                        freq == "daily" or
+                        (freq == "weekly" and date.weekday() == 5) or
+                        (freq == "monthly" and d == month_last - 1)
+                    )
+                    if should_exist:
                         db.execute(
                             "INSERT INTO habit_entry (habit_id,date) VALUES (?,?)",
                             (habit_id, date.isoformat())
@@ -191,7 +191,6 @@ def home():
         elif action == "remove":
             hid = request.form.get("habit_id")
             if hid:
-                # remove from today onward only
                 db.execute(
                     "DELETE FROM habit_entry WHERE habit_id=? AND date>=?",
                     (hid, today.isoformat())
@@ -204,22 +203,19 @@ def home():
         db.commit()
         return redirect(request.url)
 
+    # Load habits
     habits = db.execute(
         "SELECT * FROM habit WHERE user_id=? ORDER BY id DESC",
         (user_id,)
     ).fetchall()
 
-    # Build calendar
-    month_days = []
+    # Ensure future entries exist for this month (never create past entries)
     month_last = calendar.monthrange(current_month.year, current_month.month)[1]
-
     for d in range(1, month_last + 1):
         date = datetime.date(current_month.year, current_month.month, d)
 
-        # ensure entries exist for FUTURE dates only (never create for past dates)
         if date >= today:
             for h in habits:
-                # check if entry should exist
                 should_exist = (
                     h["frequency"] == "daily" or
                     (h["frequency"] == "weekly" and date.weekday() == 5) or
@@ -237,6 +233,19 @@ def home():
                         )
             db.commit()
 
+    # Build real calendar grid: Mon..Sun headers + leading blanks
+    # calendar.monthrange => (weekday_of_first_day Mon=0..Sun=6, num_days)
+    first_weekday, num_days = calendar.monthrange(current_month.year, current_month.month)
+
+    month_cells = []
+    # Add leading blanks (Mon=0 means no blanks; Tue=1 means 1 blank, etc.)
+    for _ in range(first_weekday):
+        month_cells.append(None)
+
+    # Add day objects
+    for d in range(1, num_days + 1):
+        date = datetime.date(current_month.year, current_month.month, d)
+
         entries = db.execute("""
             SELECT * FROM habit_entry
             WHERE date=? AND habit_id IN (SELECT id FROM habit WHERE user_id=?)
@@ -248,21 +257,47 @@ def home():
             (user_id, date.isoformat())
         ).fetchone()
 
-        month_days.append({
+        month_cells.append({
             "date": date,
             "entries": entries,
             "reason": reason_row["reason"] if reason_row else ""
         })
 
+    # ---- Per-habit current streak (show on Home) ----
+    habit_streaks = []
+    for h in habits:
+        rows = db.execute(
+            "SELECT date, completed FROM habit_entry WHERE habit_id=? ORDER BY date ASC",
+            (h["id"],)
+        ).fetchall()
+
+        current_streak = 0
+        for r in reversed(rows):
+            d = datetime.date.fromisoformat(r["date"])
+            if d > today:
+                continue
+            if r["completed"] == 1:
+                current_streak += 1
+            else:
+                break
+
+        habit_streaks.append({
+            "name": h["name"],
+            "frequency": h["frequency"],
+            "streak": current_streak
+        })
+
     return render_template(
         "home.html",
         habits=habits,
-        month_days=month_days,
+        habit_streaks=habit_streaks,
+        month_cells=month_cells,
         today=today,
         current_month=current_month,
         prev_month=prev_month,
-        next_month=next_month,
+        next_month=next_month
     )
+
 
 # ---------------- AJAX ----------------
 @app.route("/update_completion", methods=["POST"])

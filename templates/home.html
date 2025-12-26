@@ -50,7 +50,7 @@
 <!-- Calendar -->
 <div class="grid grid-cols-7 gap-2">
     {% for day in month_days %}
-        {% set completed = day.entries|selectattr("completed")|select("eq",1)|list|length %}
+        {% set completed = day.entries|selectattr("completed")|select("equalto",1)|list|length %}
         {% set total = day.entries|length %}
         {% if day.date > today %}
             {% set color="bg-gray-300" %}
@@ -79,6 +79,8 @@
     {% endfor %}
 </div>
 
+<!-- AJAX for checkbox completion -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
 $(document).ready(function(){
     $('input[type="checkbox"][name="completed"]').change(function(){
@@ -96,3 +98,5 @@ $(document).ready(function(){
     });
 });
 </script>
+
+{% endblock %}

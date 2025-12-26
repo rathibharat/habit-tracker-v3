@@ -88,25 +88,43 @@ def habit_name(habit_id):
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+
+        if not email or not password:
+            return render_template("login.html", error="Email and password required")
+
         db = get_db()
-        user = db.execute("SELECT * FROM user WHERE email=?",
-                          (request.form["email"],)).fetchone()
-        if user and check_password_hash(user["password"], request.form["password"]):
+        user = db.execute("SELECT * FROM user WHERE email=?", (email,)).fetchone()
+        if user and check_password_hash(user["password"], password):
             session["user_id"] = user["id"]
             return redirect("/home")
+
+        return render_template("login.html", error="Invalid credentials")
+
     return render_template("login.html")
 
 @app.route("/register", methods=["GET", "POST"])
+@limiter.limit("10/hour")
 def register():
     if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+
+        if not email or not password:
+            return render_template("register.html", error="Email and password required")
+
         db = get_db()
-        db.execute(
-            "INSERT INTO user (email, password) VALUES (?,?)",
-            (request.form["email"],
-             generate_password_hash(request.form["password"]))
-        )
-        db.commit()
-        return redirect("/login")
+        try:
+            db.execute(
+                "INSERT INTO user (email, password) VALUES (?,?)",
+                (email, generate_password_hash(password))
+            )
+            db.commit()
+            return redirect("/login")
+        except sqlite3.IntegrityError:
+            return render_template("register.html", error="Email already registered")
+
     return render_template("register.html")
 
 @app.route("/logout")

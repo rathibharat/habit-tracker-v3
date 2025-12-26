@@ -1,329 +1,237 @@
-import os
-import sqlite3
-import datetime
-import io
-import csv
-from flask import Flask, render_template, request, redirect, url_for, session, g, send_file, jsonify
+import os, sqlite3, calendar, datetime
+from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
-import calendar
 
-# ---- App Setup ----
+# ------------------ App Setup ------------------
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "supersecretkey")
+app.secret_key = os.environ.get("SECRET_KEY", "streakly-secret")
 
-# --- Jinja filter to get habit name from habit_id ---
-@app.template_filter('habit_name')
-def habit_name_filter(habit_id):
-    db = get_db()
-    h = db.execute("SELECT name FROM habit WHERE id=?", (habit_id,)).fetchone()
-    return h["name"] if h else "Unknown"
+# ------------------ Rate Limiter (Safe) ------------------
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
+limiter.init_app(app)
 
-# ---- Flask-Limiter with optional Redis ----
-REDIS_URL = os.environ.get("REDIS_URL", None)
+# ------------------ Database ------------------
+DB = "streakly.db"
 
-if REDIS_URL:
-    try:
-        import redis  # make sure 'redis' package is installed
-        limiter = Limiter(
-            key_func=get_remote_address,
-            storage_uri=REDIS_URL,
-            default_limits=["200 per day", "50 per hour"]
-        )
-        limiter.init_app(app)
-        print("Using Redis for rate limiting")
-    except ImportError:
-        print("Redis package not installed. Falling back to in-memory limiter")
-        limiter = Limiter(
-            key_func=get_remote_address,
-            default_limits=["200 per day", "50 per hour"]
-        )
-        limiter.init_app(app)
-else:
-    print("REDIS_URL not set. Using in-memory limiter")
-    limiter = Limiter(
-        key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"]
-    )
-    limiter.init_app(app)
-
-
-
-# ---- Admin Email from environment ----
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@example.com")
-
-# ---- Database helpers ----
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect("streakly.db")
+        g.db = sqlite3.connect(DB)
         g.db.row_factory = sqlite3.Row
     return g.db
 
+@app.teardown_appcontext
 def close_db(e=None):
     db = g.pop("db", None)
     if db:
         db.close()
 
-app.teardown_appcontext(close_db)
-
 def init_db():
     db = get_db()
-    db.execute('''
-        CREATE TABLE IF NOT EXISTS user(
-            id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT
-        )
-    ''')
-    db.execute('''
-        CREATE TABLE IF NOT EXISTS habit(
-            id INTEGER PRIMARY KEY, user_id INTEGER, name TEXT, frequency TEXT
-        )
-    ''')
-    db.execute('''
-        CREATE TABLE IF NOT EXISTS habit_entry(
-            id INTEGER PRIMARY KEY, habit_id INTEGER, date TEXT, completed INTEGER DEFAULT 0, reason TEXT
-        )
-    ''')
+    db.executescript("""
+    CREATE TABLE IF NOT EXISTS user (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE,
+        password TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS habit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        name TEXT,
+        frequency TEXT,
+        created_on TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS habit_entry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        habit_id INTEGER,
+        date TEXT,
+        completed INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS day_reason (
+        user_id INTEGER,
+        date TEXT,
+        reason TEXT,
+        PRIMARY KEY(user_id, date)
+    );
+    """)
     db.commit()
 
-# ---- Login Required Decorator ----
+with app.app_context():
+    init_db()
+
+# ------------------ Auth ------------------
 def login_required(f):
-    from functools import wraps
     @wraps(f)
-    def decorated(*args, **kwargs):
+    def wrapped(*args, **kwargs):
         if "user_id" not in session:
-            return redirect(url_for("login"))
+            return redirect("/login")
         return f(*args, **kwargs)
-    return decorated
+    return wrapped
 
-# ---- Auth Routes ----
-@app.route("/register", methods=["GET","POST"])
-@limiter.limit("10/hour")
-def register():
-    if request.method=="POST":
-        username = request.form["username"]
-        password = generate_password_hash(request.form["password"])
-        db = get_db()
-        try:
-            db.execute("INSERT INTO user(username,password) VALUES(?,?)", (username,password))
-            db.commit()
-            return redirect(url_for("login"))
-        except:
-            return "Username exists"
-    return render_template("register.html")
+# ------------------ Jinja Filter ------------------
+@app.template_filter("habit_name")
+def habit_name(habit_id):
+    db = get_db()
+    h = db.execute("SELECT name FROM habit WHERE id=?", (habit_id,)).fetchone()
+    return h["name"] if h else "Unknown"
 
-@app.route("/login", methods=["GET","POST"])
-@limiter.limit("20/hour")
+# ------------------ Routes ------------------
+@app.route("/", methods=["GET", "POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method=="POST":
-        username = request.form["username"]
-        password = request.form["password"]
+    if request.method == "POST":
         db = get_db()
-        user = db.execute("SELECT * FROM user WHERE username=?", (username,)).fetchone()
-        if user and check_password_hash(user["password"], password):
+        user = db.execute("SELECT * FROM user WHERE email=?",
+                          (request.form["email"],)).fetchone()
+        if user and check_password_hash(user["password"], request.form["password"]):
             session["user_id"] = user["id"]
-            return redirect(url_for("home"))
-        return "Invalid credentials"
+            return redirect("/home")
     return render_template("login.html")
 
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        db = get_db()
+        db.execute(
+            "INSERT INTO user (email, password) VALUES (?,?)",
+            (request.form["email"],
+             generate_password_hash(request.form["password"]))
+        )
+        db.commit()
+        return redirect("/login")
+    return render_template("register.html")
+
 @app.route("/logout")
-@login_required
 def logout():
     session.clear()
-    return redirect(url_for("login"))
+    return redirect("/login")
 
-# ---- Home / Calendar ----
-
-@app.route("/", methods=["GET","POST"])
-@app.route("/home", methods=["GET","POST"])
+# ------------------ Home ------------------
+@app.route("/home", methods=["GET", "POST"])
 @login_required
 def home():
     db = get_db()
     user_id = session["user_id"]
     today = datetime.date.today()
 
-    # --- Month navigation ---
-    month_str = request.args.get("month")
-    if month_str:
-        try:
-            year, month = map(int, month_str.split("-"))
-            current_month = datetime.date(year, month, 1)
-        except:
-            current_month = today.replace(day=1)
+    # Month navigation
+    month_param = request.args.get("month")
+    if month_param:
+        year, month = map(int, month_param.split("-"))
+        current_month = datetime.date(year, month, 1)
     else:
         current_month = today.replace(day=1)
 
-    # --- Add Habit ---
-    if request.method=="POST" and request.form.get("habit_name") and request.form.get("action")=="add":
-        habit_name = request.form["habit_name"]
-        frequency = request.form["frequency"]
-        db.execute("INSERT INTO habit(user_id,name,frequency) VALUES(?,?,?)", (user_id, habit_name, frequency))
-        db.commit()
-        habit_id = db.execute("SELECT id FROM habit WHERE user_id=? AND name=?", (user_id, habit_name)).fetchone()["id"]
+    prev_month = (current_month - datetime.timedelta(days=1)).replace(day=1)
+    next_month = (current_month + datetime.timedelta(days=32)).replace(day=1)
 
-        # Create future habit entries from today onwards
-        _, days_in_month = calendar.monthrange(today.year, today.month)
-        start_date = max(today, current_month)
-        for day_offset in range(0, 31):
-            day = start_date + datetime.timedelta(days=day_offset)
-            if day.month != current_month.month:
-                break
-            add_entry = False
-            if frequency=="daily":
-                add_entry=True
-            elif frequency=="weekly" and day.weekday()==5:
-                add_entry=True
-            elif frequency=="monthly" and day.day==(last_day_of_month(day)-1):
-                add_entry=True
-            if add_entry:
-                db.execute("INSERT INTO habit_entry(habit_id,date) VALUES(?,?)", (habit_id, day.isoformat()))
-        db.commit()
+    # Add / Remove Habit
+    if request.method == "POST":
+        action = request.form["action"]
 
-    # --- Remove Habit ---
-    if request.method=="POST" and request.form.get("habit_id") and request.form.get("action")=="remove":
-        habit_id = request.form["habit_id"]
-        db.execute("DELETE FROM habit_entry WHERE habit_id=? AND date>=?", (habit_id, today.isoformat()))
-        db.execute("DELETE FROM habit WHERE id=? AND user_id=?", (habit_id, user_id))
-        db.commit()
+        if action == "add":
+            name = request.form["habit_name"]
+            freq = request.form["frequency"]
+            db.execute(
+                "INSERT INTO habit (user_id,name,frequency,created_on) VALUES (?,?,?,?)",
+                (user_id, name, freq, today.isoformat())
+            )
+            habit_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-    # --- Save reason ---
-    if request.method=="POST" and request.form.get("reason") and request.form.get("entry_id"):
-        db.execute("UPDATE habit_entry SET reason=? WHERE id=?", (request.form["reason"], request.form["entry_id"]))
-        db.commit()
+            last_day = calendar.monthrange(current_month.year, current_month.month)[1]
+            for d in range(today.day, last_day + 1):
+                date = datetime.date(current_month.year, current_month.month, d)
+                if freq == "daily" or \
+                   (freq == "weekly" and date.weekday() == 5) or \
+                   (freq == "monthly" and d == last_day - 1):
+                    db.execute(
+                        "INSERT INTO habit_entry (habit_id,date) VALUES (?,?)",
+                        (habit_id, date.isoformat())
+                    )
 
-    # --- Fetch habits ---
+        if action == "remove":
+            hid = request.form["habit_id"]
+            db.execute(
+                "DELETE FROM habit_entry WHERE habit_id=? AND date>=?",
+                (hid, today.isoformat())
+            )
+            db.execute("DELETE FROM habit WHERE id=?", (hid,))
+        db.commit()
+        return redirect(request.url)
+
     habits = db.execute("SELECT * FROM habit WHERE user_id=?", (user_id,)).fetchall()
 
-    # --- Calendar setup ---
+    # Build calendar
     month_days = []
-    _, num_days = calendar.monthrange(current_month.year, current_month.month)
-    for day_num in range(1, num_days+1):
-        day = datetime.date(current_month.year, current_month.month, day_num)
-        day_entries = []
-        for h in habits:
-            entry = db.execute("SELECT * FROM habit_entry WHERE habit_id=? AND date=?", (h["id"], day.isoformat())).fetchone()
-            if not entry and day >= today:
-                # future entries missing? create it
-                add_entry = False
-                if h["frequency"]=="daily":
-                    add_entry=True
-                elif h["frequency"]=="weekly" and day.weekday()==5:
-                    add_entry=True
-                elif h["frequency"]=="monthly" and day.day==(last_day_of_month(day)-1):
-                    add_entry=True
-                if add_entry:
-                    db.execute("INSERT INTO habit_entry(habit_id,date) VALUES(?,?)", (h["id"], day.isoformat()))
-                    db.commit()
-                    entry = db.execute("SELECT * FROM habit_entry WHERE habit_id=? AND date=?", (h["id"], day.isoformat())).fetchone()
-            if entry:
-                day_entries.append(entry)
-        month_days.append({"date": day, "entries": day_entries})
+    last_day = calendar.monthrange(current_month.year, current_month.month)[1]
 
-    # --- Stats ---
-    total_entries = sum([len(d["entries"]) for d in month_days])
-    completed_entries = sum([sum([1 for e in d["entries"] if e["completed"]==1]) for d in month_days])
-    consistency = int((completed_entries/total_entries)*100) if total_entries>0 else 0
-    streak = calculate_streak(month_days)
+    for d in range(1, last_day + 1):
+        date = datetime.date(current_month.year, current_month.month, d)
+        entries = db.execute("""
+            SELECT * FROM habit_entry
+            WHERE date=? AND habit_id IN
+            (SELECT id FROM habit WHERE user_id=?)
+        """, (date.isoformat(), user_id)).fetchall()
 
-    # --- Month Navigation URLs ---
-    prev_month = (current_month.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
-    next_month = (current_month.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        reason_row = db.execute(
+            "SELECT reason FROM day_reason WHERE user_id=? AND date=?",
+            (user_id, date.isoformat())
+        ).fetchone()
 
-    return render_template("home.html", habits=habits, month_days=month_days, today=today,
-                           consistency=consistency, streak=streak,
-                           current_month=current_month,
-                           prev_month=prev_month, next_month=next_month)
+        month_days.append({
+            "date": date,
+            "entries": entries,
+            "reason": reason_row["reason"] if reason_row else ""
+        })
 
+    return render_template(
+        "home.html",
+        habits=habits,
+        month_days=month_days,
+        today=today,
+        current_month=current_month,
+        prev_month=prev_month,
+        next_month=next_month,
+        consistency=0,
+        streak=0
+    )
 
-# ---- Analytics ----
-@app.route("/analytics")
-@login_required
-def analytics():
-    db = get_db()
-    user_id = session["user_id"]
-    habits = db.execute("SELECT * FROM habit WHERE user_id=?", (user_id,)).fetchall()
-    analytics_data = []
-    for h in habits:
-        entries = db.execute("SELECT * FROM habit_entry WHERE habit_id=?", (h["id"],)).fetchall()
-        total = len(entries)
-        completed = sum([1 for e in entries if e["completed"]==1])
-        streak = calculate_habit_streak(entries)
-        consistency = int((completed/total)*100) if total>0 else 0
-        analytics_data.append({"name":h["name"], "consistency":consistency, "streak":streak})
-    return render_template("analytics.html", data=analytics_data)
-
-# ---- CSV Export ----
-@app.route("/export_csv")
-@login_required
-def export_csv():
-    db = get_db()
-    user_id = session["user_id"]
-    habits = db.execute("SELECT * FROM habit WHERE user_id=?", (user_id,)).fetchall()
-    si = io.StringIO()
-    cw = csv.writer(si)
-    cw.writerow(["Habit","Date","Completed","Reason"])
-    for h in habits:
-        entries = db.execute("SELECT * FROM habit_entry WHERE habit_id=?", (h["id"],)).fetchall()
-        for e in entries:
-            cw.writerow([h["name"], e["date"], e["completed"], e["reason"]])
-    output = io.BytesIO()
-    output.write(si.getvalue().encode())
-    output.seek(0)
-    return send_file(output, mimetype="text/csv", as_attachment=True, download_name="streakly.csv")
-
-# ---- AJAX completion update ----
+# ------------------ AJAX ------------------
 @app.route("/update_completion", methods=["POST"])
 @login_required
 def update_completion():
     data = request.get_json()
-    entry_id = data.get("entry_id")
-    completed = data.get("completed")
     db = get_db()
-    db.execute("UPDATE habit_entry SET completed=? WHERE id=?", (completed, entry_id))
+    db.execute(
+        "UPDATE habit_entry SET completed=? WHERE id=?",
+        (data["completed"], data["entry_id"])
+    )
     db.commit()
-    return jsonify({"status":"success"})
+    return jsonify(success=True)
 
-# ---- Admin Panel ----
-@app.route("/admin")
+@app.route("/update_reason", methods=["POST"])
 @login_required
-def admin_panel():
+def update_reason():
+    data = request.get_json()
     db = get_db()
-    user_id = session["user_id"]
-    user = db.execute("SELECT * FROM user WHERE id=?", (user_id,)).fetchone()
-    if user["username"] != ADMIN_EMAIL:
-        return "Unauthorized", 403
-    return "Welcome Admin"
+    db.execute("""
+        INSERT INTO day_reason (user_id,date,reason)
+        VALUES (?,?,?)
+        ON CONFLICT(user_id,date)
+        DO UPDATE SET reason=excluded.reason
+    """, (session["user_id"], data["date"], data["reason"]))
+    db.commit()
+    return jsonify(success=True)
 
-# ---- Helper Functions ----
-def last_day_of_month(date):
-    next_month = date.replace(day=28) + datetime.timedelta(days=4)
-    return (next_month - datetime.timedelta(days=next_month.day)).day
-
-def calculate_streak(month_days):
-    streak=0
-    max_streak=0
-    for d in month_days:
-        if all(e["completed"]==1 for e in d["entries"]) and d["date"]<=datetime.date.today():
-            streak+=1
-            max_streak=max(max_streak, streak)
-        else:
-            streak=0
-    return max_streak
-
-def calculate_habit_streak(entries):
-    streak=0
-    max_streak=0
-    for e in entries:
-        if e["completed"]==1:
-            streak+=1
-            max_streak=max(max_streak, streak)
-        else:
-            streak=0
-    return max_streak
-
-# ---- Run App ----
-if __name__=="__main__":
+if __name__ == "__main__":
     with app.app_context():
-        init_db()
-    app.run(host="0.0.0.0", port=5000)
+        db.create_all()
+        app.run(host="0.0.0.0", port=5000)

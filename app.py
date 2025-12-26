@@ -13,11 +13,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///streakly.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
-
-# Security
 serializer = URLSafeTimedSerializer(app.secret_key)
 
-# Flask-Limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
 limiter.init_app(app)
 
@@ -34,6 +31,7 @@ class Habit(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     name = db.Column(db.String(100))
     frequency = db.Column(db.String(10))
+    created_at = db.Column(db.Date, default=datetime.date.today)
     completions = db.relationship("Completion", backref="habit", cascade="all, delete-orphan")
 
 class Completion(db.Model):
@@ -45,7 +43,7 @@ class Completion(db.Model):
     done = db.Column(db.Boolean, default=False)
     reason = db.Column(db.String(200), default="")
 
-# Context processor for templates
+# Context processors
 @app.context_processor
 def inject_user():
     if "user_id" in session:
@@ -53,7 +51,6 @@ def inject_user():
         return dict(current_user=user)
     return dict(current_user=None)
 
-# Context processor to make datetime available in all templates
 @app.context_processor
 def utility_processor():
     import datetime
@@ -122,41 +119,57 @@ def delete_user(user_id):
 # Calendar generation
 def generate_calendar_data(user_id, year, month):
     habits = Habit.query.filter_by(user_id=user_id).all()
-    calendar_data=[]
-    month_range=calendar.monthrange(year,month)[1]
-    for day in range(1,month_range+1):
-        day_date=datetime.date(year,month,day)
-        weekday=day_date.weekday()
-        day_habits=[]
+    calendar_data = []
+    today = datetime.date.today()
+    month_range = calendar.monthrange(year, month)[1]
+
+    for day in range(1, month_range+1):
+        day_date = datetime.date(year, month, day)
+        day_habits = []
+
         for habit in habits:
-            include=False
-            if habit.frequency=="daily":
-                include=True
-            elif habit.frequency=="weekly" and weekday==5:  # Saturday
-                include=True
-            elif habit.frequency=="monthly" and day==month_range-1:  # second last day
-                include=True
+            if day_date < habit.created_at:
+                continue
+
+            include = False
+            weekday = day_date.weekday()
+            if habit.frequency == "daily":
+                include = True
+            elif habit.frequency == "weekly" and weekday == 5:
+                include = True
+            elif habit.frequency == "monthly" and day == month_range - 1:
+                include = True
+
             if include:
-                completion=Completion.query.filter_by(habit_id=habit.id, day=day, month=month, year=year).first()
+                completion = Completion.query.filter_by(
+                    habit_id=habit.id, day=day, month=month, year=year
+                ).first()
                 day_habits.append({
-                    "id":habit.id,
-                    "name":habit.name,
-                    "done":completion.done if completion else False
+                    "id": habit.id,
+                    "name": habit.name,
+                    "done": completion.done if completion else False
                 })
-        total=len(day_habits)
-        done_count=sum(1 for h in day_habits if h["done"])
-        if day_date>datetime.date.today():
-            color="gray"
-        elif total==0:
-            color="gray"
-        elif done_count==total:
-            color="green"
-        elif done_count>0:
-            color="yellow"
+
+        total = len(day_habits)
+        done_count = sum(1 for h in day_habits if h["done"])
+
+        if day_date > today or total == 0:
+            color = "white"
+        elif done_count == total:
+            color = "#c8f7c5"
+        elif done_count > 0:
+            color = "#fff3b0"
         else:
-            color="red"
-        show_reason=done_count<total and total>0
-        calendar_data.append({"day":day,"habits":day_habits,"color":color,"show_reason":show_reason})
+            color = "#f7c8c8"
+
+        show_reason = done_count < total and total > 0
+        calendar_data.append({
+            "day": day,
+            "habits": day_habits,
+            "color": color,
+            "show_reason": show_reason,
+            "editable": day_date == today
+        })
     return calendar_data
 
 # Home page
@@ -165,10 +178,10 @@ def generate_calendar_data(user_id, year, month):
 def home():
     if "user_id" not in session:
         return redirect(url_for("login"))
-    user_id=session["user_id"]
-    today=datetime.date.today()
-    month=int(request.args.get("month", today.month))
-    year=int(request.args.get("year", today.year))
+    user_id = session["user_id"]
+    today = datetime.date.today()
+    month = int(request.args.get("month", today.month))
+    year = int(request.args.get("year", today.year))
 
     if request.method=="POST":
         name=request.form["name"]
@@ -188,15 +201,15 @@ def home():
         total_done+=sum(1 for h in day["habits"] if h["done"])
     consistency=round(total_done/total_habits*100,2) if total_habits>0 else 0
     streak=0
-    return render_template("home.html", habits=habits, calendar_data=calendar_data, month=month, year=year, consistency=consistency, streak=streak)
+    return render_template("home.html", habits=habits, calendar_data=calendar_data,
+                           month=month, year=year, consistency=consistency, streak=streak)
 
 # Toggle completion
 @app.route("/complete/<int:habit_id>/<int:day>", methods=["POST"])
-@limiter.limit("100 per hour")
 def complete(habit_id, day):
     if "user_id" not in session:
         return jsonify({"status":"error"})
-    user_id=session["user_id"]
+    user_id = session["user_id"]
     month=int(request.form["month"])
     year=int(request.form["year"])
     reason=request.form.get("reason","")
@@ -208,17 +221,20 @@ def complete(habit_id, day):
     completion.reason=reason
     db.session.commit()
 
-    day_habits=Completion.query.join(Habit).filter(Habit.user_id==user_id, Completion.day==day, Completion.month==month, Completion.year==year).all()
+    day_habits=Completion.query.join(Habit).filter(Habit.user_id==user_id,
+                                                   Completion.day==day,
+                                                   Completion.month==month,
+                                                   Completion.year==year).all()
     total=len(day_habits)
     done_count=sum(1 for h in day_habits if h.done)
     if total==0:
-        color="gray"
+        color="white"
     elif done_count==total:
-        color="green"
+        color="#c8f7c5"
     elif done_count>0:
-        color="yellow"
+        color="#fff3b0"
     else:
-        color="red"
+        color="#f7c8c8"
 
     return jsonify({"status":"ok","color":color})
 
@@ -268,8 +284,7 @@ def export():
         writer.writerow([c.habit.name, c.day, c.month, c.year, c.done, c.reason])
     return output
 
-# Run app with app context
+# Run app
 if __name__=="__main__":
     with app.app_context():
         db.create_all()
-app.run(host="0.0.0.0", port=5000)

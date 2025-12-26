@@ -1,16 +1,15 @@
 {% extends "layout.html" %}
-{% block content %}
-<h3>Analytics</h3>
-<table class="table table-bordered">
-<tr><th>Habit</th><th>Total</th><th>Completed</th><th>Streak</th></tr>
-{% for item in data %}
-<tr>
-<td>{{ item.name }}</td>
-<td>{{ item.total }}</td>
-<td>{{ item.done }}</td>
-<td>{{ item.streak }}</td>
-</tr>
-{% endfor %}
-</table>
-{% endblock %}
+{% block title %}Analytics{% endblock %}
 
+{% block content %}
+<h2 class="text-xl font-bold mb-4">Analytics</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+    {% for habit in data %}
+    <div class="p-4 bg-white rounded shadow">
+        <h3 class="font-bold text-lg mb-2">{{ habit.name }}</h3>
+        <p>Consistency: <span class="font-semibold">{{ habit.consistency }}%</span></p>
+        <p>Max Streak: <span class="font-semibold">{{ habit.streak }} days</span></p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

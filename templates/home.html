@@ -1,6 +1,13 @@
 {% extends "layout.html" %}
 {% block content %}
 
+<!-- Toast (global) -->
+<div id="toast"
+     class="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] hidden
+            bg-gray-900 text-white text-sm px-4 py-2 rounded-xl shadow-lg">
+  <span id="toastText">Saved ✓</span>
+</div>
+
 <!-- Month Navigation -->
 <div class="flex justify-between items-center mb-4">
   <a class="px-3 py-2 bg-white border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50 text-sm"
@@ -121,8 +128,37 @@
   </div>
 </div>
 
+<!-- Mobile-only view toggle -->
+<div class="sm:hidden mb-4">
+  <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-2 flex gap-2">
+    <button id="btnTodayView"
+            class="flex-1 px-4 py-3 rounded-xl text-sm font-semibold bg-gray-900 text-white">
+      Today
+    </button>
+    <button id="btnMonthView"
+            class="flex-1 px-4 py-3 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-900">
+      Month
+    </button>
+  </div>
+</div>
+
+<!-- Today View (mobile only) -->
+<div id="todayView" class="sm:hidden mb-6">
+  <div class="flex items-center justify-between mb-3">
+    <button id="prevDayBtn" class="px-3 py-2 bg-white border border-gray-200 rounded-xl shadow-sm">←</button>
+    <div class="text-sm font-semibold" id="todayViewTitle">Today</div>
+    <button id="nextDayBtn" class="px-3 py-2 bg-white border border-gray-200 rounded-xl shadow-sm">→</button>
+  </div>
+
+  <div id="todayViewHost"></div>
+
+  <div class="text-xs text-gray-500 mt-2">
+    Swipe left/right to move between days.
+  </div>
+</div>
+
 <!-- Calendar (Mon–Sun) -->
-<div class="overflow-x-auto">
+<div id="monthView" class="overflow-x-auto">
   <div class="min-w-[980px]">
 
     <!-- Mon-Sun header -->
@@ -152,6 +188,7 @@
                 border-gray-200
               {% endif %}
             "
+            data-date="{{ cell.date }}"
             {% if is_today %}id="today-card"{% endif %}
           >
             <!-- Thin status bar: gray for future OR no scheduled habits -->
@@ -192,12 +229,12 @@
               {% endif %}
 
               {% for e in cell.entries %}
-                <!-- Tap row toggles checkbox (not just checkbox) -->
-                <div class="habit-row flex items-center gap-2 mt-2 text-sm text-gray-800 cursor-pointer select-none"
+                <!-- Tap row toggles checkbox -->
+                <div class="habit-row flex items-center gap-3 mt-3 p-2 rounded-xl text-sm text-gray-800 cursor-pointer select-none active:bg-gray-100"
                      data-entry="{{ e.id }}"
                      {% if cell.date > today %}data-disabled="1"{% endif %}>
                   <input type="checkbox"
-                         class="checkbox align-middle"
+                         class="checkbox scale-110 align-middle"
                          data-entry="{{ e.id }}"
                          {% if e.completed %}checked{% endif %}
                          {% if cell.date > today %}disabled{% endif %}>
@@ -221,6 +258,32 @@
 </div>
 
 <script>
+/* -------------------------
+   Toast
+--------------------------*/
+let toastTimer = null;
+function showToast(msg, kind="ok") {
+  const t = document.getElementById("toast");
+  const tt = document.getElementById("toastText");
+  if (!t || !tt) return;
+
+  tt.textContent = msg;
+
+  t.classList.remove("hidden");
+  t.classList.remove("bg-gray-900", "bg-green-700", "bg-red-700", "bg-blue-700");
+
+  if (kind === "ok") t.classList.add("bg-gray-900");
+  if (kind === "success") t.classList.add("bg-green-700");
+  if (kind === "error") t.classList.add("bg-red-700");
+  if (kind === "info") t.classList.add("bg-blue-700");
+
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add("hidden"), 1400);
+}
+
+/* -------------------------
+   Day UI updater (accent bar)
+--------------------------*/
 function updateDayUI(dayBox) {
   const total = dayBox.querySelectorAll("input[type=checkbox]:not([disabled])").length;
   const checked = dayBox.querySelectorAll("input[type=checkbox]:checked").length;
@@ -244,11 +307,25 @@ function updateDayUI(dayBox) {
   else bar.classList.add("bg-red-500");
 }
 
-// Tap row toggles checkbox (mobile friendly)
+/* -------------------------
+   API helpers
+--------------------------*/
+async function apiPost(url, bodyObj) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(bodyObj || {})
+  });
+  if (!res.ok) throw new Error("Request failed");
+  return res.json().catch(() => ({}));
+}
+
+/* -------------------------
+   Tap row toggles checkbox
+--------------------------*/
 document.querySelectorAll(".habit-row").forEach(row => {
-  row.addEventListener("click", (e) => {
+  row.addEventListener("click", async (e) => {
     if (row.dataset.disabled === "1") return;
-    // avoid double toggle if user taps the checkbox itself
     if (e.target && e.target.tagName === "INPUT") return;
 
     const entryId = row.dataset.entry;
@@ -257,69 +334,284 @@ document.querySelectorAll(".habit-row").forEach(row => {
 
     cb.checked = !cb.checked;
 
-    fetch("/update_completion", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ entry_id: entryId, completed: cb.checked ? 1 : 0 })
-    });
-
-    updateDayUI(row.closest(".day-box"));
+    try {
+      await apiPost("/update_completion", { entry_id: entryId, completed: cb.checked ? 1 : 0 });
+      updateDayUI(row.closest(".day-box"));
+      showToast("Updated ✓", "ok");
+    } catch {
+      cb.checked = !cb.checked;
+      showToast("Failed", "error");
+    }
   });
 });
 
-// Checkbox direct toggle still works
+/* -------------------------
+   Checkbox direct toggle
+--------------------------*/
 document.querySelectorAll('input[type=checkbox][data-entry]').forEach(cb => {
-  cb.addEventListener("change", () => {
+  cb.addEventListener("change", async () => {
     if (cb.disabled) return;
 
-    fetch("/update_completion", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ entry_id: cb.dataset.entry, completed: cb.checked ? 1 : 0 })
-    });
-
-    updateDayUI(cb.closest(".day-box"));
+    try {
+      await apiPost("/update_completion", { entry_id: cb.dataset.entry, completed: cb.checked ? 1 : 0 });
+      updateDayUI(cb.closest(".day-box"));
+      showToast("Updated ✓", "ok");
+    } catch {
+      cb.checked = !cb.checked;
+      showToast("Failed", "error");
+    }
   });
 });
 
-// Mark all done (Today only)
+/* -------------------------
+   Mark all done (Today only)
+--------------------------*/
 async function markAllDoneToday(btn) {
   const dayBox = btn.closest(".day-box");
   if (!dayBox) return;
 
-  await fetch("/mark_all_done_today", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({})
-  });
-
-  dayBox.querySelectorAll('input[type="checkbox"]:not([disabled])').forEach(cb => {
-    cb.checked = true;
-  });
-
-  updateDayUI(dayBox);
+  try {
+    await apiPost("/mark_all_done_today", {});
+    dayBox.querySelectorAll('input[type="checkbox"]:not([disabled])').forEach(cb => cb.checked = true);
+    updateDayUI(dayBox);
+    showToast("All done ✓", "success");
+  } catch {
+    showToast("Failed", "error");
+  }
 }
 
-// Save reason on blur
+/* -------------------------
+   Save reason on blur
+--------------------------*/
 document.querySelectorAll(".reason").forEach(r => {
-  r.addEventListener("blur", () => {
+  r.addEventListener("blur", async () => {
     if (r.disabled) return;
+    try {
+      await apiPost("/update_reason", { date: r.dataset.date, reason: r.value });
+      showToast("Saved ✓", "ok");
 
-    fetch("/update_reason", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ date: r.dataset.date, reason: r.value })
-    });
+      // Mirror into Today View clone if open
+      const host = document.getElementById("todayViewHost");
+      if (host && host.children.length) {
+        const cloneReason = host.querySelector('.reason[data-date="'+r.dataset.date+'"]');
+        if (cloneReason && cloneReason !== r) cloneReason.value = r.value;
+      }
+    } catch {
+      showToast("Failed", "error");
+    }
   });
 });
 
-// Auto-scroll to Today card on load
+/* -------------------------
+   Auto-scroll to Today card (Month view)
+--------------------------*/
 window.addEventListener("load", () => {
   const todayCard = document.getElementById("today-card");
   if (todayCard) {
     todayCard.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
   }
 });
+
+/* -------------------------
+   Mobile Today View + Swipe
+--------------------------*/
+(function() {
+  const monthView = document.getElementById("monthView");
+  const todayView = document.getElementById("todayView");
+  const todayHost = document.getElementById("todayViewHost");
+
+  const btnTodayView = document.getElementById("btnTodayView");
+  const btnMonthView = document.getElementById("btnMonthView");
+  const prevDayBtn = document.getElementById("prevDayBtn");
+  const nextDayBtn = document.getElementById("nextDayBtn");
+  const todayViewTitle = document.getElementById("todayViewTitle");
+
+  if (!monthView || !todayView || !todayHost || !btnTodayView || !btnMonthView) return;
+
+  function getDayCards() {
+    return Array.from(document.querySelectorAll(".day-box[data-date]"));
+  }
+
+  function setToggle(active) {
+    if (active === "today") {
+      todayView.classList.remove("hidden");
+      monthView.classList.add("hidden");
+      btnTodayView.className = "flex-1 px-4 py-3 rounded-xl text-sm font-semibold bg-gray-900 text-white";
+      btnMonthView.className = "flex-1 px-4 py-3 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-900";
+    } else {
+      todayView.classList.add("hidden");
+      monthView.classList.remove("hidden");
+      btnMonthView.className = "flex-1 px-4 py-3 rounded-xl text-sm font-semibold bg-gray-900 text-white";
+      btnTodayView.className = "flex-1 px-4 py-3 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-900";
+    }
+  }
+
+  let cards = getDayCards();
+  let currentIndex = Math.max(0, cards.findIndex(c => c.id === "today-card"));
+  if (currentIndex === -1) currentIndex = 0;
+
+  function titleFromDateStr(dateStr, isToday) {
+    if (isToday) return "Today";
+    try {
+      const d = new Date(dateStr + "T00:00:00");
+      const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+      return `${days[d.getDay()]} ${d.getDate()}`;
+    } catch {
+      return "Day";
+    }
+  }
+
+  function cloneCardIntoTodayView(originalCard) {
+    const clone = originalCard.cloneNode(true);
+    clone.removeAttribute("id"); // avoid duplicate id
+
+    // Make it feel roomy on mobile
+    clone.classList.add("text-base");
+
+    // Re-wire the clone events
+    // Tap row toggle
+    clone.querySelectorAll(".habit-row").forEach(row => {
+      row.addEventListener("click", (e) => {
+        if (row.dataset.disabled === "1") return;
+        if (e.target && e.target.tagName === "INPUT") return;
+        const cb = row.querySelector('input[type="checkbox"]');
+        if (!cb || cb.disabled) return;
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    });
+
+    // Checkbox change
+    clone.querySelectorAll('input[type="checkbox"][data-entry]').forEach(cb => {
+      cb.addEventListener("change", async () => {
+        if (cb.disabled) return;
+        try {
+          await apiPost("/update_completion", { entry_id: cb.dataset.entry, completed: cb.checked ? 1 : 0 });
+
+          // Mirror into real month card
+          const dateStr = originalCard.getAttribute("data-date");
+          const realCb = document.querySelector(`.day-box[data-date="${dateStr}"] input[data-entry="${cb.dataset.entry}"]`);
+          if (realCb) realCb.checked = cb.checked;
+
+          updateDayUI(clone);
+          const realBox = document.querySelector(`.day-box[data-date="${dateStr}"]`);
+          if (realBox) updateDayUI(realBox);
+
+          showToast("Updated ✓", "ok");
+        } catch {
+          cb.checked = !cb.checked;
+          showToast("Failed", "error");
+        }
+      });
+    });
+
+    // Reason blur
+    const reason = clone.querySelector(".reason");
+    if (reason) {
+      reason.addEventListener("blur", async () => {
+        if (reason.disabled) return;
+        try {
+          await apiPost("/update_reason", { date: reason.dataset.date, reason: reason.value });
+
+          // mirror into real month card
+          const dateStr = originalCard.getAttribute("data-date");
+          const realReason = document.querySelector(`.day-box[data-date="${dateStr}"] .reason`);
+          if (realReason) realReason.value = reason.value;
+
+          showToast("Saved ✓", "ok");
+        } catch {
+          showToast("Failed", "error");
+        }
+      });
+    }
+
+    // Mark all done button in clone
+    const btn = clone.querySelector('button[onclick^="markAllDoneToday"]');
+    if (btn) {
+      btn.onclick = async () => {
+        try {
+          await apiPost("/mark_all_done_today", {});
+          clone.querySelectorAll('input[type="checkbox"]:not([disabled])').forEach(cb => cb.checked = true);
+          updateDayUI(clone);
+
+          // Mirror into real today card
+          const realToday = document.getElementById("today-card");
+          if (realToday) {
+            realToday.querySelectorAll('input[type="checkbox"]:not([disabled])').forEach(cb => cb.checked = true);
+            updateDayUI(realToday);
+          }
+
+          showToast("All done ✓", "success");
+        } catch {
+          showToast("Failed", "error");
+        }
+      };
+    }
+
+    todayHost.innerHTML = "";
+    todayHost.appendChild(clone);
+
+    const dateStr = originalCard.getAttribute("data-date");
+    todayViewTitle.textContent = titleFromDateStr(dateStr, originalCard.id === "today-card");
+  }
+
+  function showIndex(idx) {
+    cards = getDayCards();
+    if (!cards.length) return;
+    currentIndex = Math.max(0, Math.min(idx, cards.length - 1));
+    cloneCardIntoTodayView(cards[currentIndex]);
+  }
+
+  btnTodayView.addEventListener("click", () => {
+    setToggle("today");
+    showIndex(currentIndex);
+  });
+
+  btnMonthView.addEventListener("click", () => setToggle("month"));
+
+  if (prevDayBtn) prevDayBtn.addEventListener("click", () => showIndex(currentIndex - 1));
+  if (nextDayBtn) nextDayBtn.addEventListener("click", () => showIndex(currentIndex + 1));
+
+  // Swipe
+  let startX = null, startY = null, lastTouchTime = 0;
+  todayHost.addEventListener("touchstart", (e) => {
+    if (!e.touches || e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+
+  todayHost.addEventListener("touchend", (e) => {
+    if (startX === null || startY === null) return;
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) {
+      startX = startY = null;
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastTouchTime < 250) return;
+    lastTouchTime = now;
+
+    if (dx < 0) showIndex(currentIndex + 1);
+    else showIndex(currentIndex - 1);
+
+    startX = startY = null;
+  }, { passive: true });
+
+  // Default on mobile: Today view
+  const isMobile = window.matchMedia("(max-width: 639px)").matches;
+  if (isMobile) {
+    setToggle("today");
+    showIndex(currentIndex);
+  } else {
+    setToggle("month");
+  }
+})();
 </script>
 
 {% endblock %}

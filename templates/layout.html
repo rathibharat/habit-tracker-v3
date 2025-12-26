@@ -9,16 +9,19 @@
 </head>
 <body>
 <div class="d-flex flex-wrap">
+    {% if current_user %}
     <div class="sidebar bg-light">
         <h4>Streakly ✅</h4>
         <a href="{{ url_for('home') }}" class="d-block my-2">Home</a>
         <a href="{{ url_for('analytics') }}" class="d-block my-2">Analytics</a>
         <a href="{{ url_for('export') }}" class="d-block my-2">Export CSV</a>
-        {% if current_user and current_user.is_admin %}
+        {% if current_user.is_admin %}
         <a href="{{ url_for('admin_dashboard') }}" class="d-block my-2">Admin</a>
         {% endif %}
+        <a href="{{ url_for('jump_today') }}" class="d-block my-2">Jump to Today</a>
         <a href="{{ url_for('logout') }}" class="d-block my-2">Logout</a>
     </div>
+    {% endif %}
     <div class="flex-grow-1 p-3">
         {% block content %}{% endblock %}
     </div>

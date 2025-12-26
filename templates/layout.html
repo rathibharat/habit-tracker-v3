@@ -17,7 +17,82 @@
   </div>
 </header>
 
-<div class="max-w-7xl mx-auto px-4 py-6 flex gap-6">
+<div class="max-w-7xl mx-auto px-4 py-6 flex gap-6"><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Streakly</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+  <!-- Top header -->
+  <header class="bg-white/80 backdrop-blur border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-full bg-green-600 text-white flex items-center justify-center text-lg shadow-sm">
+        ✓
+      </div>
+      <div>
+        <div class="text-lg font-semibold leading-tight">Streakly</div>
+        <div class="text-xs text-gray-500 leading-tight">Build habits. Keep streaks.</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page layout -->
+  <div class="max-w-7xl mx-auto px-4 py-6 flex gap-6">
+
+    {% if session.get("user_id") %}
+      <!-- Sidebar (authenticated only) -->
+      <aside class="hidden md:block w-60 shrink-0">
+        <div class="bg-white border border-gray-200 rounded-2xl p-3 shadow-sm">
+          <nav class="space-y-1">
+            <a href="/home" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
+              🏠 <span>Home</span>
+            </a>
+            <a href="/analytics" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
+              📈 <span>Analytics</span>
+            </a>
+            <a href="/export" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
+              ⬇️ <span>Export</span>
+            </a>
+
+            <div class="h-px bg-gray-200 my-2"></div>
+
+            <a href="/home" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm">
+              🗓️ <span>Jump to Today</span>
+            </a>
+
+            <a href="/logout" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-sm text-red-600">
+              🚪 <span>Logout</span>
+            </a>
+          </nav>
+        </div>
+      </aside>
+    {% endif %}
+
+    <!-- Main content -->
+    {% if session.get("user_id") %}
+      <!-- Logged-in pages: normal wide layout -->
+      <main class="flex-1 min-w-0">
+        {% block content %}{% endblock %}
+      </main>
+    {% else %}
+      <!-- Login/Register pages: centered and focused -->
+      <main class="flex-1 flex justify-center">
+        <div class="w-full max-w-md">
+          {% block content %}{% endblock %}
+        </div>
+      </main>
+    {% endif %}
+
+  </div>
+
+</body>
+</html>
+
 
   {% if session.get("user_id") %}
     <!-- Sidebar (only when logged in) -->

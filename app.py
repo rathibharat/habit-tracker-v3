@@ -84,31 +84,39 @@ def habit_name(habit_id):
 
 # ---------------- Auth ----------------
 @app.route("/", methods=["GET", "POST"])
-@app.route("/login", methods=["GET", "POST"])
-@limiter.limit("20/hour")
-def login():
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
-        if not email or not password:
-            return render_template("login.html", error="Email and password required")
 
-        db = get_db()
-        user = db.execute("SELECT * FROM user WHERE email=?", (email,)).fetchone()
-        if user and check_password_hash(user["password"], password):
-            session["user_id"] = user["id"]
-            session["user_email"] = user["email"] 
-            return redirect("/home")
-
-        return render_template("login.html", error="Invalid credentials")
-
-    return render_template("login.html")
 
 @app.route("/register", methods=["GET", "POST"])
 @limiter.limit("10/hour")
 def register():
     if request.method == "POST":
+        email = request.form.get("ema@app.route("/login", methods=["GET", "POST"])
+@limiter.limit("20/hour")
+def login():
+    # ✅ If already logged in, don't show login page (and thus no sidebar confusion)
+    if session.get("user_id"):
+        return redirect("/home")
+
+    if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+
+        if not email or not password:
+            return render_template("login.html", error="Email and password required")
+
+        db = get_db()
+        user = db.execute("SELECT * FROM user WHERE email=?", (email,)).fetchone()
+
+        if user and check_password_hash(user["password"], password):
+            session.clear()  # ✅ clears any stale session keys
+            session["user_id"] = user["id"]
+            session["user_email"] = user["email"]
+            return redirect("/home")
+
+        return render_template("login.html", error="Invalid credentials")
+
+    return render_template("login.html")
+il", "").strip().lower()
         password = request.form.get("password", "")
         if not email or not password:
             return render_template("register.html", error="Email and password required")

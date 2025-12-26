@@ -3,3 +3,4 @@ Flask-SQLAlchemy
 Werkzeug
 itsdangerous
 Flask-Limiter
+openpyxl>=3.1.2

@@ -264,15 +264,26 @@ def home():
         })
 
     # ---- Per-habit current streak (show on Home) ----
-    habit_streaks = []
+       # ---- Per-habit: current streak + consistency % for the viewed month ----
+    habit_stats = []
+
+    month_start = current_month.isoformat()
+    month_end = datetime.date(
+        current_month.year,
+        current_month.month,
+        calendar.monthrange(current_month.year, current_month.month)[1]
+    ).isoformat()
+
     for h in habits:
-        rows = db.execute(
+        # All entries for the habit (for streak calc)
+        rows_all = db.execute(
             "SELECT date, completed FROM habit_entry WHERE habit_id=? ORDER BY date ASC",
             (h["id"],)
         ).fetchall()
 
+        # Current streak (ending at latest <= today)
         current_streak = 0
-        for r in reversed(rows):
+        for r in reversed(rows_all):
             d = datetime.date.fromisoformat(r["date"])
             if d > today:
                 continue
@@ -281,16 +292,42 @@ def home():
             else:
                 break
 
-        habit_streaks.append({
+        # Month consistency (viewed month)
+        rows_month = db.execute("""
+            SELECT completed
+            FROM habit_entry
+            WHERE habit_id=? AND date>=? AND date<=?
+        """, (h["id"], month_start, month_end)).fetchall()
+
+        m_total = len(rows_month)
+        m_done = sum(1 for r in rows_month if r["completed"] == 1)
+        m_consistency = int((m_done / m_total) * 100) if m_total else 0
+
+        # Simple status bucket for icon
+        if m_total == 0:
+            vibe = "🌱"   # no scheduled days this month
+        elif m_consistency >= 85:
+            vibe = "🔥"
+        elif m_consistency >= 60:
+            vibe = "✨"
+        else:
+            vibe = "🧠"
+
+        habit_stats.append({
             "name": h["name"],
             "frequency": h["frequency"],
-            "streak": current_streak
+            "streak": current_streak,
+            "m_total": m_total,
+            "m_done": m_done,
+            "m_consistency": m_consistency,
+            "vibe": vibe
         })
+
 
     return render_template(
         "home.html",
         habits=habits,
-        habit_streaks=habit_streaks,
+       habit_stats=habit_stats,
         month_cells=month_cells,
         today=today,
         current_month=current_month,

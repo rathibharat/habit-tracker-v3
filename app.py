@@ -8,14 +8,18 @@ from functools import wraps
 import datetime, calendar, csv
 
 app = Flask(__name__)
-app.secret_key = "YOUR_SECRET_KEY"
+app.secret_key = "1234"
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///streakly.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Security
 serializer = URLSafeTimedSerializer(app.secret_key)
-limiter = Limiter(app, key_func=get_remote_address, default_limits=["200 per day","50 per hour"])
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
+limiter.init_app(app)
 
 # Models
 class User(db.Model):

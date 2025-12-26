@@ -1,199 +1,139 @@
 {% extends "layout.html" %}
 {% block content %}
 
-<!-- Month Navigation -->
-<div class="flex justify-between items-center mb-4">
-  <a class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
-     href="?month={{ prev_month.strftime('%Y-%m') }}">← Prev</a>
+<!-- Top row: Month navigation -->
+<div class="flex items-center justify-between mb-4">
+  <div class="flex items-center gap-2">
+    <a class="px-3 py-2 bg-white border rounded-xl hover:bg-gray-50 transition"
+       href="?month={{ prev_month.strftime('%Y-%m') }}">←</a>
 
-  <h2 class="font-bold text-lg">{{ current_month.strftime('%B %Y') }}</h2>
+    <div class="px-4 py-2 bg-white border rounded-xl">
+      <div class="text-sm text-gray-500">Month</div>
+      <div class="text-lg font-semibold">{{ current_month.strftime('%B %Y') }}</div>
+    </div>
 
-  <div class="flex gap-2">
-    <a class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
-       href="?month={{ next_month.strftime('%Y-%m') }}">Next →</a>
-    <a class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-       href="/home">Today</a>
+    <a class="px-3 py-2 bg-white border rounded-xl hover:bg-gray-50 transition"
+       href="?month={{ next_month.strftime('%Y-%m') }}">→</a>
   </div>
+
+  <a class="px-4 py-2 bg-gray-900 text-white rounded-xl hover:bg-black transition"
+     href="/home">Today</a>
 </div>
 
-<!-- Per-habit streak + month consistency (polished cards) -->
-<div class="mb-5">
-  <div class="flex items-center justify-between mb-2">
-    <h3 class="font-semibold">Habits this month</h3>
-    <div class="text-xs text-gray-500">
-      {{ current_month.strftime('%B %Y') }}
-    </div>
+<!-- Habit cards: streak + month consistency -->
+<div class="bg-white border rounded-2xl p-4 shadow-sm mb-5">
+  <div class="flex items-center justify-between mb-3">
+    <div class="text-lg font-semibold">Habits</div>
+    <div class="text-xs text-gray-500">This month overview</div>
   </div>
 
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
     {% for h in habit_stats %}
-      <div class="bg-white border rounded-xl p-4 shadow-sm hover:shadow transition">
+      <div class="border rounded-2xl p-4 hover:bg-gray-50 transition">
         <div class="flex items-start justify-between">
           <div>
-            <div class="text-lg font-bold flex items-center gap-2">
-              <span class="text-xl">{{ h.vibe }}</span>
-              <span>{{ h.name }}</span>
-            </div>
+            <div class="text-base font-semibold">{{ h.name }}</div>
             <div class="text-xs text-gray-500 mt-0.5">{{ h.frequency }}</div>
           </div>
-
           <div class="text-right">
-            <div class="text-xs text-gray-500">Streak</div>
-            <div class="text-2xl font-extrabold leading-none">{{ h.streak }}</div>
+            <div class="text-[11px] text-gray-500">Streak</div>
+            <div class="text-2xl font-semibold leading-none">{{ h.streak }}</div>
           </div>
         </div>
 
-        <!-- Mini graph: consistency bar -->
         <div class="mt-3">
-          <div class="flex items-center justify-between text-xs text-gray-600 mb-1">
+          <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
             <span>Consistency</span>
-            <span class="font-semibold">{{ h.m_consistency }}%</span>
+            <span class="font-semibold text-gray-800">{{ h.m_consistency }}%</span>
           </div>
-          <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div class="bg-green-500 h-2 rounded-full" style="width: {{ h.m_consistency }}%"></div>
-          </div>
-          <div class="text-[11px] text-gray-500 mt-1">
-            {{ h.m_done }} done / {{ h.m_total }} scheduled
-          </div>
-        </div>
 
-        <!-- Tiny “sparkline-ish” dots -->
-        <div class="mt-3 flex gap-1">
-          {% set dots = 12 %}
-          {% set filled = (h.m_consistency * dots // 100) %}
-          {% for i in range(dots) %}
-            <span class="w-2 h-2 rounded-full
-              {% if i < filled %}bg-green-500{% else %}bg-gray-300{% endif %}"></span>
-          {% endfor %}
+          <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div class="bg-gray-900 h-2 rounded-full" style="width: {{ h.m_consistency }}%"></div>
+          </div>
+
+          <div class="text-[11px] text-gray-500 mt-1">
+            {{ h.m_done }} / {{ h.m_total }} scheduled
+          </div>
         </div>
       </div>
     {% else %}
-      <div class="text-sm text-gray-600">No habits yet. Add a habit below.</div>
+      <div class="text-sm text-gray-600">No habits yet. Add one below.</div>
     {% endfor %}
   </div>
 </div>
 
+<!-- Add/Remove Habits (minimal) -->
+<div class="bg-white border rounded-2xl p-4 shadow-sm mb-5">
+  <div class="text-lg font-semibold mb-3">Manage habits</div>
 
-<!-- Add Habit -->
-<form method="POST" class="mb-4 flex flex-col sm:flex-row gap-2">
-  <input type="hidden" name="action" value="add">
-  <input name="habit_name" placeholder="Habit name" required class="border p-2 rounded flex-1">
-  <select name="frequency" class="border p-2 rounded">
-    <option value="daily">Daily</option>
-    <option value="weekly">Weekly (Sat)</option>
-    <option value="monthly">Monthly (2nd last day)</option>
-  </select>
-  <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button>
-</form>
+  <form method="POST" class="flex flex-col sm:flex-row gap-2 mb-4">
+    <input type="hidden" name="action" value="add">
+    <input name="habit_name" placeholder="Habit name" required
+           class="border rounded-xl p-3 flex-1 focus:outline-none focus:ring-2 focus:ring-gray-300">
+    <select name="frequency" class="border rounded-xl p-3">
+      <option value="daily">Daily</option>
+      <option value="weekly">Weekly (Sat)</option>
+      <option value="monthly">Monthly (2nd last day)</option>
+    </select>
+    <button class="bg-gray-900 text-white px-5 py-3 rounded-xl hover:bg-black transition">
+      Add
+    </button>
+  </form>
 
-<!-- Remove Habit buttons -->
-<div class="mb-4">
-  <h3 class="font-semibold mb-2">Your Habits</h3>
   <div class="flex flex-wrap gap-2">
     {% for h in habits %}
-    <form method="POST" class="flex items-center gap-2 bg-white border rounded px-3 py-2">
+    <form method="POST" class="flex items-center gap-2 bg-gray-50 border rounded-xl px-3 py-2">
       <input type="hidden" name="action" value="remove">
       <input type="hidden" name="habit_id" value="{{ h.id }}">
       <span class="text-sm font-medium">{{ h.name }}</span>
       <span class="text-xs text-gray-500">({{ h.frequency }})</span>
-      <button class="ml-2 text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700">
+      <button class="text-xs px-2 py-1 rounded-lg bg-white border hover:bg-red-50 hover:border-red-200 hover:text-red-700 transition">
         Remove
       </button>
     </form>
     {% endfor %}
     {% if habits|length == 0 %}
-      <div class="text-sm text-gray-600">No habits yet. Add one above.</div>
+      <div class="text-sm text-gray-600">No habits yet.</div>
     {% endif %}
   </div>
-</div>
 
-<!-- Calendar header + grid -->
-<div class="overflow-x-auto">
-  <div class="min-w-[900px]">
-    <!-- Mon-Sun header -->
-    <div class="grid grid-cols-7 gap-2 mb-2 text-center font-semibold text-gray-700">
-      <div class="bg-white border rounded p-2">Mon</div>
-      <div class="bg-white border rounded p-2">Tue</div>
-      <div class="bg-white border rounded p-2">Wed</div>
-      <div class="bg-white border rounded p-2">Thu</div>
-      <div class="bg-white border rounded p-2">Fri</div>
-      <div class="bg-white border rounded p-2">Sat</div>
-      <div class="bg-white border rounded p-2">Sun</div>
-    </div>
-
-    <!-- Calendar cells -->
-    <div class="grid grid-cols-7 gap-2">
-      {% for cell in month_cells %}
-        {% if cell is none %}
-          <div class="p-3 rounded bg-transparent"></div>
-        {% else %}
-          {% set checked_count = cell.entries|selectattr('completed', 'equalto', 1)|list|length %}
-          {% set total_count = cell.entries|length %}
-
-          <div class="p-3 rounded day-box
-            {% if cell.date > today %}bg-gray-300
-            {% elif total_count > 0 and checked_count == total_count %}bg-green-400
-            {% elif checked_count > 0 %}bg-yellow-300
-            {% else %}bg-red-400{% endif %}">
-
-            <div class="flex items-center justify-between">
-              <strong>{{ cell.date.day }}</strong>
-              <span class="text-xs text-gray-700 count">{{ checked_count }}/{{ total_count }}</span>
-            </div>
-
-            {% for e in cell.entries %}
-              <label class="block text-sm mt-1">
-                <input type="checkbox" class="mr-1" data-entry="{{ e.id }}" {% if e.completed %}checked{% endif %}>
-                {{ e.habit_id | habit_name }}
-              </label>
-            {% endfor %}
-
-            <textarea class="w-full text-sm mt-2 p-2 rounded border reason"
-                      data-date="{{ cell.date }}"
-                      placeholder="Reason (once per day)…">{{ cell.reason }}</textarea>
-          </div>
-        {% endif %}
-      {% endfor %}
-    </div>
+  <div class="text-xs text-gray-400 mt-3">
+    Removing a habit deletes it only from today onward. Past history stays.
   </div>
 </div>
 
-<script>
-function updateDayColor(dayBox) {
-  const total = dayBox.querySelectorAll("input[type=checkbox]").length;
-  const checked = dayBox.querySelectorAll("input[type=checkbox]:checked").length;
+<!-- Calendar -->
+<div class="bg-white border rounded-2xl p-4 shadow-sm">
+  <div class="flex items-center justify-between mb-3">
+    <div class="text-lg font-semibold">Calendar</div>
+    <div class="text-xs text-gray-500">Tap checkboxes • Colors update instantly</div>
+  </div>
 
-  dayBox.classList.remove("bg-red-400", "bg-yellow-300", "bg-green-400");
+  <!-- Mon–Sun header -->
+  <div class="grid grid-cols-7 gap-2 text-center text-xs text-gray-500 mb-2">
+    <div class="py-2">Mon</div><div class="py-2">Tue</div><div class="py-2">Wed</div>
+    <div class="py-2">Thu</div><div class="py-2">Fri</div><div class="py-2">Sat</div>
+    <div class="py-2">Sun</div>
+  </div>
 
-  if (total === 0) return;
-  if (checked === total) dayBox.classList.add("bg-green-400");
-  else if (checked > 0) dayBox.classList.add("bg-yellow-300");
-  else dayBox.classList.add("bg-red-400");
+  <div class="grid grid-cols-7 gap-2">
+    {% for cell in month_cells %}
+      {% if cell is none %}
+        <div class="min-h-[120px]"></div>
+      {% else %}
+        {% set checked_count = cell.entries|selectattr('completed', 'equalto', 1)|list|length %}
+        {% set total_count = cell.entries|length %}
 
-  const cnt = dayBox.querySelector(".count");
-  if (cnt) cnt.textContent = `${checked}/${total}`;
-}
+        <div class="min-h-[120px] p-3 rounded-2xl day-box border
+          {% if cell.date > today %}bg-gray-100 text-gray-400
+          {% elif total_count > 0 and checked_count == total_count %}bg-green-50 border-green-200
+          {% elif checked_count > 0 %}bg-yellow-50 border-yellow-200
+          {% else %}bg-red-50 border-red-200{% endif %}">
 
-document.querySelectorAll('input[type=checkbox][data-entry]').forEach(cb => {
-  cb.addEventListener("change", () => {
-    fetch("/update_completion", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ entry_id: cb.dataset.entry, completed: cb.checked ? 1 : 0 })
-    });
-    updateDayColor(cb.closest(".day-box"));
-  });
-});
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">{{ cell.date.day }}</div>
+            <div class="text-[11px] text-gray-500 count">{{ checked_count }}/{{ total_count }}</div>
+          </div>
 
-document.querySelectorAll(".reason").forEach(r => {
-  r.addEventListener("blur", () => {
-    fetch("/update_reason", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ date: r.dataset.date, reason: r.value })
-    });
-  });
-});
-</script>
-
-{% endblock %}
+          {% for e in cell.entries %}
+            <label class="block text-sm leading-tight mt-

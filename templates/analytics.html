@@ -1,1 +1,16 @@
+{% extends "layout.html" %}
+{% block content %}
+<h3>Analytics</h3>
+<table class="table table-bordered">
+<tr><th>Habit</th><th>Total</th><th>Completed</th><th>Streak</th></tr>
+{% for item in data %}
+<tr>
+<td>{{ item.name }}</td>
+<td>{{ item.total }}</td>
+<td>{{ item.done }}</td>
+<td>{{ item.streak }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}
 

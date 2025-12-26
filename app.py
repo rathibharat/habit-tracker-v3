@@ -15,7 +15,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Initialize Limiter with default in-memory storage
-limiter = Limiter(app, key_func=get_remote_address)
+limiter = Limiter(
+    app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]  # optional, your choice
+)
 
 # Models
 class User(db.Model):

@@ -13,14 +13,35 @@ from functools import wraps
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "supersecretkey")
 
-# ---- Redis-backed Rate Limiter ----
-# Set environment variable REDIS_URL on Render, e.g., redis://:<password>@<host>:6379/0
-limiter = Limiter(
-    key_func=get_remote_address,
-    storage_uri=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
-    default_limits=["200 per day", "50 per hour"]
-)
-limiter.init_app(app)
+# ---- Flask-Limiter with optional Redis ----
+REDIS_URL = os.environ.get("REDIS_URL", None)
+
+if REDIS_URL:
+    try:
+        import redis  # make sure 'redis' package is installed
+        limiter = Limiter(
+            key_func=get_remote_address,
+            storage_uri=REDIS_URL,
+            default_limits=["200 per day", "50 per hour"]
+        )
+        limiter.init_app(app)
+        print("Using Redis for rate limiting")
+    except ImportError:
+        print("Redis package not installed. Falling back to in-memory limiter")
+        limiter = Limiter(
+            key_func=get_remote_address,
+            default_limits=["200 per day", "50 per hour"]
+        )
+        limiter.init_app(app)
+else:
+    print("REDIS_URL not set. Using in-memory limiter")
+    limiter = Limiter(
+        key_func=get_remote_address,
+        default_limits=["200 per day", "50 per hour"]
+    )
+    limiter.init_app(app)
+
+
 
 # ---- Admin Email from environment ----
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@example.com")

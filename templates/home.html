@@ -128,8 +128,18 @@
         {% else %}
           {% set checked_count = cell.entries|selectattr('completed', 'equalto', 1)|list|length %}
           {% set total_count = cell.entries|length %}
+          {% set is_today = (cell.date == today) %}
 
-          <div class="day-box bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+          <div
+            class="day-box bg-white border rounded-2xl shadow-sm overflow-hidden
+              {% if is_today %}
+                ring-2 ring-blue-500/40 border-blue-300 bg-blue-50/40
+              {% else %}
+                border-gray-200
+              {% endif %}
+            "
+            {% if is_today %}id="today-card"{% endif %}
+          >
 
             <!-- Thin status bar -->
             <div class="status-bar h-1
@@ -141,7 +151,16 @@
 
             <div class="p-3">
               <div class="flex items-center justify-between">
-                <strong class="text-sm">{{ cell.date.day }}</strong>
+                <div class="flex items-center gap-2">
+                  <strong class="text-sm">{{ cell.date.day }}</strong>
+
+                  {% if is_today %}
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-600/10 text-blue-700 font-medium">
+                      Today
+                    </span>
+                  {% endif %}
+                </div>
+
                 <span class="text-[11px] text-gray-500 count">{{ checked_count }}/{{ total_count }}</span>
               </div>
 
@@ -161,7 +180,7 @@
               <textarea class="w-full text-sm mt-3 p-2 rounded-xl border border-gray-200 bg-gray-50/60 reason
                                focus:outline-none focus:ring-2 focus:ring-gray-200"
                         data-date="{{ cell.date }}"
-                        placeholder="Reason"
+                        placeholder="Reason (once per day)…"
                         {% if cell.date > today %}disabled{% endif %}>{{ cell.reason }}</textarea>
             </div>
           </div>
@@ -217,6 +236,14 @@ document.querySelectorAll(".reason").forEach(r => {
       body: JSON.stringify({ date: r.dataset.date, reason: r.value })
     });
   });
+});
+
+/* ✅ Auto-scroll to Today card on load (only if it exists in this month view) */
+window.addEventListener("load", () => {
+  const todayCard = document.getElementById("today-card");
+  if (todayCard) {
+    todayCard.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+  }
 });
 </script>
 

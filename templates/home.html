@@ -3,12 +3,12 @@
 
 {% block content %}
 <h2 class="text-xl font-bold mb-4">Monthly Stats</h2>
-<div class="flex space-x-4 mb-6">
-    <div class="p-4 bg-green-100 rounded w-1/2 text-center">
+<div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 mb-6">
+    <div class="p-4 bg-green-100 rounded w-full sm:w-1/2 text-center">
         <p class="font-bold text-lg">Consistency</p>
         <p class="text-2xl">{{ consistency }}%</p>
     </div>
-    <div class="p-4 bg-blue-100 rounded w-1/2 text-center">
+    <div class="p-4 bg-blue-100 rounded w-full sm:w-1/2 text-center">
         <p class="font-bold text-lg">Streak</p>
         <p class="text-2xl">{{ streak }} days</p>
     </div>
@@ -30,7 +30,7 @@
 <!-- Calendar -->
 <div class="grid grid-cols-7 gap-2">
     {% for day in month_days %}
-        {% set completed = day.entries|selectattr("completed")|list|length %}
+        {% set completed = day.entries|selectattr("completed")|select("eq",1)|list|length %}
         {% set total = day.entries|length %}
         {% if day.date > today %}
             {% set color="bg-gray-300" %}
@@ -41,19 +41,19 @@
         {% else %}
             {% set color="bg-red-400" %}
         {% endif %}
-    <div class="p-2 rounded {{ color }} flex flex-col">
-        <div class="font-bold">{{ day.date.day }}</div>
-        {% for entry in day.entries %}
-        <form method="POST" class="mt-1">
-            <input type="hidden" name="entry_id" value="{{ entry.id }}">
-            <textarea name="reason" placeholder="Reason..." class="w-full p-1 text-sm rounded">{{ entry.reason }}</textarea>
-            <label class="flex items-center space-x-1 mt-1">
-                <input type="checkbox" name="completed" {% if entry.completed %}checked{% endif %} onchange="this.form.submit()">
-                <span>Done</span>
-            </label>
-        </form>
-        {% endfor %}
-    </div>
+        <div class="p-2 rounded {{ color }} flex flex-col">
+            <div class="font-bold">{{ day.date.day }}</div>
+            {% for entry in day.entries %}
+            <form method="POST" class="mt-1">
+                <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                <textarea name="reason" placeholder="Reason..." class="w-full p-1 text-sm rounded">{{ entry.reason }}</textarea>
+                <label class="flex items-center space-x-1 mt-1">
+                    <input type="checkbox" name="completed" {% if entry.completed %}checked{% endif %}>
+                    <span>Done</span>
+                </label>
+            </form>
+            {% endfor %}
+        </div>
     {% endfor %}
 </div>
 {% endblock %}

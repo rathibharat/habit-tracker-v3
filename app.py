@@ -1,34 +1,44 @@
-from flask import Flask, render_template, request, redirect, url_for, session, g, send_file
+import os
+import sqlite3
+import datetime
+import io
+import csv
+from flask import Flask, render_template, request, redirect, url_for, session, g, send_file, jsonify
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3, datetime, io, csv
+from functools import wraps
 
+# ---- App Setup ----
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
+app.secret_key = os.environ.get("SECRET_KEY", "supersecretkey")
 
-# Rate limiter
+# ---- Redis-backed Rate Limiter ----
+# Set environment variable REDIS_URL on Render, e.g., redis://:<password>@<host>:6379/0
 limiter = Limiter(
-    key_func=get_remote_address,  # specify the key function
+    key_func=get_remote_address,
+    storage_uri=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
     default_limits=["200 per day", "50 per hour"]
 )
-limiter.init_app(app)  # attach to the Flask app
+limiter.init_app(app)
 
+# ---- Admin Email from environment ----
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@example.com")
 
-# Database helper
+# ---- Database helpers ----
 def get_db():
     if "db" not in g:
         g.db = sqlite3.connect("streakly.db")
         g.db.row_factory = sqlite3.Row
     return g.db
 
-@app.teardown_appcontext
 def close_db(e=None):
     db = g.pop("db", None)
     if db:
         db.close()
 
-# Initialize DB
+app.teardown_appcontext(close_db)
+
 def init_db():
     db = get_db()
     db.execute('''
@@ -47,9 +57,18 @@ def init_db():
         )
     ''')
     db.commit()
-init_db()
 
-# ---- Authentication ----
+# ---- Login Required Decorator ----
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+# ---- Auth Routes ----
 @app.route("/register", methods=["GET","POST"])
 @limiter.limit("10/hour")
 def register():
@@ -80,6 +99,7 @@ def login():
     return render_template("login.html")
 
 @app.route("/logout")
+@login_required
 def logout():
     session.clear()
     return redirect(url_for("login"))
@@ -87,28 +107,26 @@ def logout():
 # ---- Home / Calendar ----
 @app.route("/", methods=["GET","POST"])
 @app.route("/home", methods=["GET","POST"])
+@login_required
 def home():
-    if "user_id" not in session:
-        return redirect(url_for("login"))
     db = get_db()
     user_id = session["user_id"]
 
-    # Add Habit
+    # Add habit
     if request.method=="POST" and request.form.get("habit_name"):
         db.execute("INSERT INTO habit(user_id,name,frequency) VALUES(?,?,?)",
                    (user_id, request.form["habit_name"], request.form["frequency"]))
         db.commit()
-    
-    # Get habits
-    habits = db.execute("SELECT * FROM habit WHERE user_id=?", (user_id,)).fetchall()
 
-    # Handle reason submission
+    # Save reason
     if request.method=="POST" and request.form.get("reason") and request.form.get("entry_id"):
         db.execute("UPDATE habit_entry SET reason=? WHERE id=?",
                    (request.form["reason"], request.form["entry_id"]))
         db.commit()
 
-    # Calendar setup for current month
+    habits = db.execute("SELECT * FROM habit WHERE user_id=?", (user_id,)).fetchall()
+
+    # Calendar setup
     today = datetime.date.today()
     first_day = today.replace(day=1)
     month_days = []
@@ -127,7 +145,7 @@ def home():
                         add_entry = True
                     elif h["frequency"]=="weekly" and day.weekday()==5:
                         add_entry = True
-                    elif h["frequency"]=="monthly" and day.day== (last_day_of_month(day)-1):
+                    elif h["frequency"]=="monthly" and day.day==(last_day_of_month(day)-1):
                         add_entry = True
                     if add_entry:
                         db.execute("INSERT INTO habit_entry(habit_id,date) VALUES(?,?)", (h["id"], day.isoformat()))
@@ -139,20 +157,18 @@ def home():
         except:
             break
 
-    # Stats
     total_entries = sum([len(d["entries"]) for d in month_days])
     completed_entries = sum([sum([1 for e in d["entries"] if e["completed"]==1]) for d in month_days])
     consistency = int((completed_entries/total_entries)*100) if total_entries>0 else 0
     streak = calculate_streak(month_days)
 
-    return render_template("home.html", habits=habits, month_days=month_days,
-                           today=today, consistency=consistency, streak=streak)
+    return render_template("home.html", habits=habits, month_days=month_days, today=today,
+                           consistency=consistency, streak=streak)
 
 # ---- Analytics ----
 @app.route("/analytics")
+@login_required
 def analytics():
-    if "user_id" not in session:
-        return redirect(url_for("login"))
     db = get_db()
     user_id = session["user_id"]
     habits = db.execute("SELECT * FROM habit WHERE user_id=?", (user_id,)).fetchall()
@@ -168,9 +184,8 @@ def analytics():
 
 # ---- CSV Export ----
 @app.route("/export_csv")
+@login_required
 def export_csv():
-    if "user_id" not in session:
-        return redirect(url_for("login"))
     db = get_db()
     user_id = session["user_id"]
     habits = db.execute("SELECT * FROM habit WHERE user_id=?", (user_id,)).fetchall()
@@ -186,7 +201,30 @@ def export_csv():
     output.seek(0)
     return send_file(output, mimetype="text/csv", as_attachment=True, download_name="streakly.csv")
 
-# ---- Helper functions ----
+# ---- AJAX completion update ----
+@app.route("/update_completion", methods=["POST"])
+@login_required
+def update_completion():
+    data = request.get_json()
+    entry_id = data.get("entry_id")
+    completed = data.get("completed")
+    db = get_db()
+    db.execute("UPDATE habit_entry SET completed=? WHERE id=?", (completed, entry_id))
+    db.commit()
+    return jsonify({"status":"success"})
+
+# ---- Admin Panel ----
+@app.route("/admin")
+@login_required
+def admin_panel():
+    db = get_db()
+    user_id = session["user_id"]
+    user = db.execute("SELECT * FROM user WHERE id=?", (user_id,)).fetchone()
+    if user["username"] != ADMIN_EMAIL:
+        return "Unauthorized", 403
+    return "Welcome Admin"
+
+# ---- Helper Functions ----
 def last_day_of_month(date):
     next_month = date.replace(day=28) + datetime.timedelta(days=4)
     return (next_month - datetime.timedelta(days=next_month.day)).day
@@ -213,7 +251,8 @@ def calculate_habit_streak(entries):
             streak=0
     return max_streak
 
+# ---- Run App ----
 if __name__=="__main__":
-   with app.app_context():
-        db.create_all()
-        app.run(host="0.0.0.0", port=5000)
+    with app.app_context():
+        init_db()
+    app.run(debug=True)
